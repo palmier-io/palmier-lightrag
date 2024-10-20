@@ -70,10 +70,121 @@ def generate_qa_pair(chunk, chunk_index):
 
     return qa_pair
 
-def get_model_response(model_path, question):
-    # Implement model inference
-    pass
+def get_model_response(model_name, question):
+    if model_name == "gpt-4o-mini":
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Your task is to answer a codebase related question. Provide your answer in a JSON format with 'answer', 'context_file', and 'context_chunk' fields. If you have no context to answer the question, leave the context fields blank."},
+                {"role": "user", "content": question}
+            ],
+            n=1,
+            stop=None,
+            temperature=0.5,
+        )
+        
+        # Parse the response content as JSON
+        try:
+            content = response.choices[0].message.content.strip()
+            response_json = json.loads(content)
+        except json.JSONDecodeError:
+            # If the response is not valid JSON, create a default structure
+            response_json = {
+                "answer": content,
+                "context_file": "",
+                "context_chunk": ""
+            }
+        
+        # Ensure the response has the required fields
+        if "answer" not in response_json:
+            response_json["answer"] = "Error: No answer provided"
+        if "context_file" not in response_json:
+            response_json["context_file"] = ""
+        if "context_chunk" not in response_json:
+            response_json["context_chunk"] = ""
+        
+        return response_json
+    else:
+        raise ValueError(f"Unsupported model: {model_name}")
+    
 
 def evaluate_answer(expected_answer, model_answer):
-    # Implement LLM-based answer evaluation
-    pass
+    prompt = f"""
+    You are an expert / harsh evaluator tasked with assessing the quality of an AI-generated answer compared to an expected answer. Please evaluate the model's answer based on the following criteria:
+
+    1. Accuracy (45%): How factually correct and true to the expected answer is the model's response?
+    2. Completeness (25%): How thoroughly does the answer cover all aspects of the expected answer?
+    3. Relevance (10%): How well does the answer address the core of the question or topic?
+    4. Clarity (10%): How clear and easy to understand is the answer?
+    5. Conciseness (10%): How concise and to-the-point is the answer without unnecessary information?
+
+    Expected Answer:
+    {expected_answer}
+
+    Model's Answer:
+    {model_answer}
+
+    Please provide a score for each criterion (between 0 and 1) and a brief explanation. Output your evaluation in JSON format with the following structure:
+    {{
+        "accuracy": {{
+            "score": <score>,
+            "reasoning": "<explanation>"
+        }},
+        "completeness": {{
+            "score": <score>,
+            "reasoning": "<explanation>"
+        }},
+        "relevance": {{
+            "score": <score>,
+            "reasoning": "<explanation>"
+        }},
+        "clarity": {{
+            "score": <score>,
+            "reasoning": "<explanation>"
+        }},
+        "conciseness": {{
+            "score": <score>,
+            "reasoning": "<explanation>"
+        }}
+    }}
+    """
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an expert evaluator of AI-generated answers."},
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=800,
+        n=1,
+        stop=None,
+        temperature=0.5,
+    )
+
+    try:
+        content = response.choices[0].message.content.strip()
+        # Remove any markdown formatting
+        if content.startswith("```json"):
+            content = content.split("```json")[1].split("```")[0].strip()
+        evaluation = json.loads(content)
+        
+        # Calculate weighted average score
+        weighted_score = (
+            evaluation['accuracy']['score'] * 0.45 +
+            evaluation['completeness']['score'] * 0.25 +
+            evaluation['relevance']['score'] * 0.10 +
+            evaluation['clarity']['score'] * 0.10 +
+            evaluation['conciseness']['score'] * 0.10
+        )
+        
+        evaluation['weighted_score'] = round(weighted_score, 2)
+        
+        return evaluation
+    except json.JSONDecodeError as e:
+        print(f"Error parsing evaluation result: {e}")
+        print(f"Raw response: {content}")
+        return {"error": "Failed to parse evaluation result", "raw_content": content}
+    except KeyError as e:
+        print(f"Missing key in evaluation result: {e}")
+        print(f"Evaluation structure: {evaluation}")
+        return {"error": f"Missing key in evaluation result: {e}", "evaluation": evaluation}
