@@ -13,3 +13,6 @@ accelerate
 transformers
 torch
 python-dotenv
+PyGithub
+fastapi
+uvicorn

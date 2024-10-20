@@ -1,0 +1,17 @@
+{
+  "schema": {
+    "type": "object",
+    "properties": {
+      "response": {
+        "type": "string",
+        "description": "A response to the query",
+        "x_explanation": "Provide a clear and concise answer to the user's question or request"
+      }
+    },
+    "required": [
+      "response"
+    ]
+  },
+  "description": "Schema for Default Query Responses"
+}
+

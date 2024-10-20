@@ -1,0 +1,59 @@
+{
+  "schema": {
+    "type": "object",
+    "properties": {
+      "file_path": {
+        "type": "string",
+        "description": "The path to the file within the codebase",
+        "x_explanation": "Provide the relative path of the file from the root of the project"
+      },
+      "language": {
+        "type": "string",
+        "description": "The programming language of the code",
+        "x_explanation": "Specify the primary programming language used in the file (e.g., Python, JavaScript, Java)"
+      },
+      "code_snippet": {
+        "type": "string",
+        "description": "A relevant code snippet from the file",
+        "x_explanation": "Include a short, relevant code snippet that answers the query or illustrates the point"
+      },
+      "explanation": {
+        "type": "string",
+        "description": "Explanation of the code or answer to the query",
+        "x_explanation": "Provide a clear, concise explanation of the code snippet or answer the query about the codebase"
+      },
+      "dependencies": {
+        "type": "array",
+        "description": "List of dependencies or imports",
+        "x_explanation": "List any relevant dependencies, libraries, or modules imported in the file"
+      },
+      "functions": {
+        "type": "array",
+        "description": "List of relevant functions",
+        "x_explanation": "Include information about functions that are relevant to the query"
+      },
+      "classes": {
+        "type": "array",
+        "description": "List of relevant classes",
+        "x_explanation": "Include information about classes that are relevant to the query"
+      },
+      "complexity": {
+        "type": "string",
+        "description": "Estimated complexity of the code",
+        "x_explanation": "Provide an estimate of the code's complexity (Low, Medium, or High)"
+      },
+      "tags": {
+        "type": "array",
+        "description": "Relevant tags or keywords",
+        "x_explanation": "List any tags or keywords that are relevant to the code or query"
+      }
+    },
+    "required": [
+      "file_path",
+      "language",
+      "code_snippet",
+      "explanation"
+    ]
+  },
+  "description": "Schema for Codebase Query Responses"
+}
