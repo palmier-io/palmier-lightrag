@@ -1,0 +1,54 @@
+{
+  "questionTemplates": [
+    {
+      "category": "Function Implementation Search",
+      "description": "Locate where specific functions or methods are implemented and understand their functionality.",
+      "example": "Where is the calculateTotal function implemented, and how does it compute the total price?"
+    },
+    {
+      "category": "Error Source Identification",
+      "description": "Identify where an error is thrown in the code and explain why it occurs.",
+      "example": "What causes the IndexOutOfBoundsException in the processData method?"
+    },
+    {
+      "category": "Usage Examples",
+      "description": "Provide examples or guidance on how to use a particular class, method, or module.",
+      "example": "How can I use the UserAuthentication class to verify user credentials?"
+    },
+    {
+      "category": "Dependency Analysis",
+      "description": "Understand the dependencies between different modules or classes.",
+      "example": "Which modules does the PaymentGateway class depend on to process transactions?"
+    },
+    {
+      "category": "Algorithm Explanation",
+      "description": "Explain the algorithms used within specific functions or methods.",
+      "example": "How does the searchAlgorithm function implement binary search?"
+    },
+    {
+      "category": "Performance Optimization Opportunities",
+      "description": "Identify parts of the code that could be optimized for better performance.",
+      "example": "Which sections of the dataProcessing module can be optimized to reduce execution time?"
+    },
+    {
+      "category": "Design Pattern Identification",
+      "description": "Recognize design patterns employed in the codebase.",
+      "example": "What design pattern is used in the Logger class, and how does it benefit the application?"
+    },
+    {
+      "category": "Configuration Modification",
+      "description": "Explain how to modify configuration settings or adjust application parameters.",
+      "example": "How can I change the database connection settings in the application configuration?"
+    },
+    {
+      "category": "Security Vulnerability Detection",
+      "description": "Detects potential security issues in the code.",
+      "example": "Are there any security vulnerabilities in the inputValidation function related to SQL injection?"
+    },
+    {
+      "category": "Feature Extension Guidance",
+      "description": "Provide guidance on modifying or extending the code to add new features.",
+      "example": "How can I extend the NotificationService to support SMS notifications?"
+    }
+  ]
+}

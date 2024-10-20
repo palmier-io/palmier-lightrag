@@ -1,0 +1,378 @@
+[
+  {
+    "question": "How can I use the DatasetManager class to load a dataset for benchmarking?",
+    "answer": "You can use the DatasetManager class by creating an instance of it with the dataset path as an argument. Then, call the load_dataset method on the instance to retrieve the question-answer pairs, which can be passed to the ModelTester for evaluation.",
+    "context": {
+      "file": "./run_benchmark.py",
+      "chunk_text": "def main():\n    dataset_manager = DatasetManager(DATASET_PATH)\n    print('\\nStarting benchmarking phase...')\n    model_tester = ModelTester(MODEL_PATH)\n    qa_pairs = dataset_manager.load_dataset()\n    results = model_tester.test_model(qa_pairs)\n    context_evaluator = ContextEvaluator()\n    context_scores = context_evaluator.evaluate(results)\n    answer_evaluator = AnswerEvaluator()\n    answer_scores = answer_evaluator.evaluate(results)\n    print('Context Evaluation Scores:', context_scores)\n    print('Answer Evaluation Scores:', answer_scores)"
+    }
+  },
+  {
+    "question": "How can I use the DatasetManager class to load a dataset for benchmarking?",
+    "answer": "You can use the DatasetManager class to load a dataset by creating an instance of the class with the path to your dataset file. For example, in the main function, an instance is created with 'dataset_manager = DatasetManager(DATASET_PATH)', and the dataset is loaded using 'qa_pairs = dataset_manager.load_dataset()'. This will return the question-answer pairs needed for benchmarking.",
+    "context": {
+      "file": "./run_benchmark.py",
+      "chunk_text": "from dataset_creation.dataset_manager import DatasetManager\nfrom benchmarking.model_tester import ModelTester\nfrom benchmarking.context_evaluator import ContextEvaluator\nfrom benchmarking.answer_evaluator import AnswerEvaluator\nCODEBASE_PATH = './'\nDATASET_PATH = './dataset.json'\nMODEL_PATH = './model'\n\ndef main():\n    dataset_manager = DatasetManager(DATASET_PATH)\n    print('\\nStarting benchmarking phase...')\n    model_tester = ModelTester(MODEL_PATH)\n    qa_pairs = dataset_manager.load_dataset()\n    results = model_tester.test_model(qa_pairs)\n    context_evaluator = ContextEvaluator()\n    context_scores = context_evaluator.evaluate(results)\n    answer_evaluator = AnswerEvaluator()\n    answer_scores = answer_evaluator.evaluate(results)\n    print('Context Evaluation Scores:', context_scores)\n    print('Answer Evaluation Scores:', answer_scores)\nif __name__ == '__main__':\n    main()"
+    }
+  },
+  {
+    "question": "How can I use the QAGenerator class to create question-answer pairs from the codebase chunks?",
+    "answer": "You can use the QAGenerator class by initializing it with the codebase chunks obtained from the CodebaseChunker. After that, call the generate_qa_pairs method to create the question-answer pairs based on the provided chunks.",
+    "context": {
+      "file": "./create_dataset.py",
+      "chunk_text": "def main():\n    print('Starting dataset creation phase...')\n    chunker = CodebaseChunker(CODEBASE_PATH)\n    chunks = chunker.chunk_codebase()\n    qa_generator = QAGenerator(chunks)\n    qa_pairs = qa_generator.generate_qa_pairs()\n    dataset_manager = DatasetManager(DATASET_PATH)\n    dataset_manager.save_dataset(qa_pairs)\n    print(f'Dataset created and saved to {DATASET_PATH}')"
+    }
+  },
+  {
+    "question": "How can I use the DatasetManager class to save the generated QA pairs to a file?",
+    "answer": "You can use the DatasetManager class by instantiating it with the desired dataset path, and then calling the save_dataset method with the QA pairs as an argument. In the provided code, this is done with the line 'dataset_manager.save_dataset(qa_pairs)'.",
+    "context": {
+      "file": "./create_dataset.py",
+      "chunk_text": "from dataset_creation.codebase_chunker import CodebaseChunker\nfrom dataset_creation.qa_generator import QAGenerator\nfrom dataset_creation.dataset_manager import DatasetManager\nCODEBASE_PATH = './'\nDATASET_PATH = './dataset.json'\nMODEL_PATH = './model'\n\ndef main():\n    print('Starting dataset creation phase...')\n    chunker = CodebaseChunker(CODEBASE_PATH)\n    chunks = chunker.chunk_codebase()\n    qa_generator = QAGenerator(chunks)\n    qa_pairs = qa_generator.generate_qa_pairs()\n    dataset_manager = DatasetManager(DATASET_PATH)\n    dataset_manager.save_dataset(qa_pairs)\n    print(f'Dataset created and saved to {DATASET_PATH}')\nif __name__ == '__main__':\n    main()"
+    }
+  },
+  {
+    "question": "How can I use the CodebaseChunker class to chunk Python files in a specified directory?",
+    "answer": "You can instantiate the CodebaseChunker class by providing the path to the codebase directory. Then, call the chunk_codebase method to chunk all Python files (.py) found in the directory. The get_multi_file_chunks method can also be used to retrieve chunks across multiple files, with a specified maximum token limit.",
+    "context": {
+      "file": "./dataset_creation/codebase_chunker.py",
+      "chunk_text": "class CodebaseChunker:\n\n    def __init__(self, codebase_path):\n        self.codebase_path = codebase_path\n        self.tokenizer = tiktoken.get_encoding('cl100k_base')\n        self.max_tokens = 1024\n\n    def chunk_codebase(self):\n        chunks = []\n        if not os.path.exists(self.codebase_path):\n            raise FileNotFoundError(f'Codebase directory not found: {self.codebase_path}')\n        python_files = [os.path.join(root, file) for root, _, files in os.walk(self.codebase_path) for file in files if file.endswith('.py')]\n        for file_path in tqdm(python_files, desc='Chunking codebase', unit='file'):\n            print(f'Chunking: {file_path}')\n            try:\n                with open(file_path, 'r') as f:\n                    content = f.read()\n                ast_tree = parse_ast(content)\n                file_chunks = self._generate_chunks(ast_tree, file_path)\n                chunks.extend(file_chunks)\n            except FileNotFoundError:\n                print(f'Warning: File not found: {file_path}')\n            except IOError as e:\n                print(f'Error reading file {file_path}: {e}')\n            except Exception as e:\n                print(f'Unexpected error processing file {file_path}: {e}')\n        return chunks\n\n    def _generate_chunks(self, tree: ast.AST, file_path: str) -> List[Dict[str, Any]]:\n        chunks = []\n        function_chunks = self._get_function_chunks(tree, file_path)\n        chunks.extend(function_chunks)\n        file_chunk = self._get_file_chunk(tree, file_path)\n        chunks.append(file_chunk)\n        return chunks\n\n    def _get_function_chunks(self, tree: ast.AST, file_path: str) -> List[Dict[str, Any]]:\n        function_chunks = []\n        for node in ast.walk(tree):\n            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):\n                chunk = self._create_chunk(node, file_path)\n                if chunk:\n                    function_chunks.append(chunk)\n        return function_chunks\n\n    def _get_file_chunk(self, tree: ast.AST, file_path: str) -> Dict[str, Any]:\n        return {'type': 'file', 'content': ast.unparse(tree), 'metadata': {'file': file_path, 'name': os.path.basename(file_path)}}\n\n    def _create_chunk(self, node: ast.AST, file_path: str) -> Dict[str, Any]:\n        content = ast.unparse(node)\n        tokens = self.tokenizer.encode(content)\n        if len(tokens) <= self.max_tokens:\n            return {'type': 'function' if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else 'class', 'content': content, 'metadata': {'file': file_path, 'name': node.name, 'lineno': node.lineno, 'end_lineno': node.end_lineno}}\n        else:\n            return self._split_large_chunk(node, file_path)\n\n    def _split_large_chunk(self, node: ast.AST, file_path: str) -> List[Dict[str, Any]]:\n        chunks = []\n        content = ast.unparse(node)\n        tokens = self.tokenizer.encode(content)\n        start = 0\n        while start < len(tokens):\n            end = start + self.max_tokens\n            chunk_tokens = tokens[start:end]\n            chunk_content = self.tokenizer.decode(chunk_tokens)\n            chunks.append({'type': 'function_part' if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else 'class_part', 'content': chunk_content, 'metadata': {'file': file_path, 'name': f'{node.name}_part_{len(chunks) + 1}', 'original_name': node.name, 'lineno': node.lineno, 'end_lineno': node.end_lineno}})\n            start = end\n        return chunks\n\n    def _print_chunks(self, chunks: List[Dict[str, Any]]):\n        for chunk in chunks:\n            print('\\n--- Chunk ---')\n            print(f\"Type: {chunk['type']}\")\n            print(f\"Metadata: {chunk['metadata']}\")\n            print('Content:')\n            print(chunk['content'])\n            print('--- End Chunk ---\\n')\n\n    def get_multi_file_chunks(self, max_tokens: int=4096) -> List[Dict[str, Any]]:\n        all_chunks = self.chunk_codebase()\n        multi_file_chunks = []\n        current_chunk = {'type': 'multi_file', 'content': '', 'metadata': {'files': []}}\n        current_tokens = 0\n        for chunk in all_chunks:\n            chunk_tokens = len(chunk['content'].split())\n            if current_tokens + chunk_tokens > max_tokens:\n                if current_chunk['content']:\n                    multi_file_chunks.append(current_chunk)\n                current_chunk = {'type': 'multi_file', 'content': '', 'metadata': {'files': []}}\n                current_tokens = 0\n            current_chunk['content'] +=\n\n chunk['content'] + '\\n\\n'\n            current_chunk['metadata']['files'].append(chunk['metadata']['file'])\n            current_tokens += chunk_tokens\n        if current_chunk['content']:\n            multi_file_chunks.append(current_chunk)\n        return multi_file_chunks"
+    }
+  },
+  {
+    "question": "How can I configure the tokenizer settings in the initialization of a class that uses a codebase path?",
+    "answer": "In the __init__ method, you can set the tokenizer by calling 'tiktoken.get_encoding' with the desired encoding type, such as 'cl100k_base'. Additionally, you can define the maximum number of tokens by setting 'self.max_tokens' to a specific integer value, like 1024.",
+    "context": {
+      "file": "./dataset_creation/codebase_chunker.py",
+      "chunk_text": "def __init__(self, codebase_path):\n    self.codebase_path = codebase_path\n    self.tokenizer = tiktoken.get_encoding('cl100k_base')\n    self.max_tokens = 1024"
+    }
+  },
+  {
+    "question": "What exceptions can occur while chunking files in the chunk_codebase method, and what are the reasons for these exceptions?",
+    "answer": "The chunk_codebase method can encounter several exceptions: 1. FileNotFoundError can be raised if the specified codebase directory does not exist. 2. A FileNotFoundError can also occur when attempting to read a file that has been deleted or moved during processing. 3. An IOError might be raised if there are issues reading the file (e.g., permission errors). 4. A general Exception can be raised for any other unexpected errors that occur during the file processing, allowing the program to handle unforeseen issues gracefully.",
+    "context": {
+      "file": "./dataset_creation/codebase_chunker.py",
+      "chunk_text": "def chunk_codebase(self):\n    chunks = []\n    if not os.path.exists(self.codebase_path):\n        raise FileNotFoundError(f'Codebase directory not found: {self.codebase_path}')\n    python_files = [os.path.join(root, file) for root, _, files in os.walk(self.codebase_path) for file in files if file.endswith('.py')]\n    for file_path in tqdm(python_files, desc='Chunking codebase', unit='file'):\n        print(f'Chunking: {file_path}')\n        try:\n            with open(file_path, 'r') as f:\n                content = f.read()\n            ast_tree = parse_ast(content)\n            file_chunks = self._generate_chunks(ast_tree, file_path)\n            chunks.extend(file_chunks)\n        except FileNotFoundError:\n            print(f'Warning: File not found: {file_path}')\n        except IOError as e:\n            print(f'Error reading file {file_path}: {e}')\n        except Exception as e:\n            print(f'Unexpected error processing file {file_path}: {e}')\n    return chunks"
+    }
+  },
+  {
+    "question": "How can I use the _generate_chunks method to extract function and file chunks from an AST tree?",
+    "answer": "The _generate_chunks method takes an abstract syntax tree (AST) and a file path as arguments. It first retrieves function chunks by calling the _get_function_chunks method, which likely processes the AST to find function definitions. It then retrieves a file chunk using the _get_file_chunk method, which may summarize the entire file's contents. Both sets of chunks are combined into a list and returned, allowing you to analyze the structure and content of the code represented by the AST.",
+    "context": {
+      "file": "./dataset_creation/codebase_chunker.py",
+      "chunk_text": "def _generate_chunks(self, tree: ast.AST, file_path: str) -> List[Dict[str, Any]]:\n    chunks = []\n    function_chunks = self._get_function_chunks(tree, file_path)\n    chunks.extend(function_chunks)\n    file_chunk = self._get_file_chunk(tree, file_path)\n    chunks.append(file_chunk)\n    return chunks"
+    }
+  },
+  {
+    "question": "Where are the functions and classes defined in the provided AST tree traversal method, and how does the method identify them?",
+    "answer": "The method _get_function_chunks traverses the AST tree and identifies function definitions (both synchronous and asynchronous) and class definitions. It uses the ast.walk function to iterate through all nodes in the tree and checks if each node is an instance of ast.FunctionDef, ast.AsyncFunctionDef, or ast.ClassDef. If a matching node is found, it creates a chunk using the _create_chunk method and adds it to the function_chunks list.",
+    "context": {
+      "file": "./dataset_creation/codebase_chunker.py",
+      "chunk_text": "def _get_function_chunks(self, tree: ast.AST, file_path: str) -> List[Dict[str, Any]]:\n    function_chunks = []\n    for node in ast.walk(tree):\n        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):\n            chunk = self._create_chunk(node, file_path)\n            if chunk:\n                function_chunks.append(chunk)\n    return function_chunks"
+    }
+  },
+  {
+    "question": "How can I use the _get_file_chunk method to retrieve a file's content and metadata?",
+    "answer": "The _get_file_chunk method takes an AST (abstract syntax tree) and a file path as arguments. It returns a dictionary that includes the type of content as 'file', the unparsed content of the AST, and metadata that contains the file path and the name of the file. You can call this method by passing the appropriate AST object and the path of the file you want to analyze.",
+    "context": {
+      "file": "./dataset_creation/codebase_chunker.py",
+      "chunk_text": "def _get_file_chunk(self, tree: ast.AST, file_path: str) -> Dict[str, Any]:\n    return {'type': 'file', 'content': ast.unparse(tree), 'metadata': {'file': file_path, 'name': os.path.basename(file_path)}}"
+    }
+  },
+  {
+    "question": "How does the _create_chunk method handle large functions or classes that exceed the maximum token limit?",
+    "answer": "The _create_chunk method first checks if the tokenized content of the AST node is less than or equal to the specified max_tokens. If it is, it creates a dictionary containing the type (either 'function' or 'class'), the content, and metadata such as the file path, node name, and line numbers. If the token count exceeds max_tokens, it calls the _split_large_chunk method to handle the splitting of the large chunk.",
+    "context": {
+      "file": "./dataset_creation/codebase_chunker.py",
+      "chunk_text": "def _create_chunk(self, node: ast.AST, file_path: str) -> Dict[str, Any]:\n    content = ast.unparse(node)\n    tokens = self.tokenizer.encode(content)\n    if len(tokens) <= self.max_tokens:\n        return {'type': 'function' if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else 'class', 'content': content, 'metadata': {'file': file_path, 'name': node.name, 'lineno': node.lineno, 'end_lineno': node.end_lineno}}\n    else:\n        return self._split_large_chunk(node, file_path)"
+    }
+  },
+  {
+    "question": "How does the _split_large_chunk method handle the splitting of large AST nodes into manageable parts?",
+    "answer": "The _split_large_chunk method takes an AST node and a file path as input, un-parses the node to get its content, and tokenizes the content into manageable chunks based on a specified maximum token limit. It iteratively slices the token list into smaller parts, creates dictionaries for each part that include its type ('function_part' or 'class_part'), content, and associated metadata like file path and line numbers. This allows for efficient handling of large code segments.",
+    "context": {
+      "file": "./dataset_creation/codebase_chunker.py",
+      "chunk_text": "def _split_large_chunk(self, node: ast.AST, file_path: str) -> List[Dict[str, Any]]:\n    chunks = []\n    content = ast.unparse(node)\n    tokens = self.tokenizer.encode(content)\n    start = 0\n    while start < len(tokens):\n        end = start + self.max_tokens\n        chunk_tokens = tokens[start:end]\n        chunk_content = self.tokenizer.decode(chunk_tokens)\n        chunks.append({'type': 'function_part' if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else 'class_part', 'content': chunk_content, 'metadata': {'file': file_path, 'name': f'{node.name}_part_{len(chunks) + 1}', 'original_name': node.name, 'lineno': node.lineno, 'end_lineno': node.end_lineno}})\n        start = end\n    return chunks"
+    }
+  },
+  {
+    "question": "How can I use the _print_chunks method to display the contents of a list of chunks?",
+    "answer": "You can call the _print_chunks method by passing a list of dictionaries, where each dictionary represents a chunk with 'type', 'metadata', and 'content' keys. The method will print the type, metadata, and content of each chunk to the console.",
+    "context": {
+      "file": "./dataset_creation/codebase_chunker.py",
+      "chunk_text": "def _print_chunks(self, chunks: List[Dict[str, Any]]):\n    for chunk in chunks:\n        print('\\n--- Chunk ---')\n        print(f\"Type: {chunk['type']}\")\n        print(f\"Metadata: {chunk['metadata']}\")\n        print('Content:')\n        print(chunk['content'])\n        print('--- End Chunk ---\\n')"
+    }
+  },
+  {
+    "question": "How does the get_multi_file_chunks method handle the chunking of codebase files based on token limits?",
+    "answer": "The get_multi_file_chunks method processes a list of code chunks generated by the chunk_codebase method. It accumulates chunks into a single 'multi_file' chunk until adding another chunk would exceed the specified max_tokens limit (4096 by default). If the limit is exceeded, the current chunk is added to the multi_file_chunks list, and a new chunk is initiated. The method continues to aggregate chunks and their associated file metadata, ultimately returning a list of multi-file chunks.",
+    "context": {
+      "file": "./dataset_creation/codebase_chunker.py",
+      "chunk_text": "def get_multi_file_chunks(self, max_tokens: int=4096) -> List[Dict[str, Any]]:\n    all_chunks = self.chunk_codebase()\n    multi_file_chunks = []\n    current_chunk = {'type': 'multi_file', 'content': '', 'metadata': {'files': []}}\n    current_tokens = 0\n    for chunk in all_chunks:\n        chunk_tokens = len(chunk['content'].split())\n        if current_tokens + chunk_tokens > max_tokens:\n            if current_chunk['content']:\n                multi_file_chunks.append(current_chunk)\n            current_chunk = {'type': 'multi_file', 'content': '', 'metadata': {'files': []}}\n            current_tokens = 0\n        current_chunk['content'] += chunk['content'] + '\\n\\n'\n        current_chunk['metadata']['files'].append(chunk['metadata']['file'])\n        current_tokens += chunk_tokens\n    if current_chunk['content']:\n        multi_file_chunks.append(current_chunk)\n    return multi_file_chunks"
+    }
+  },
+  {
+    "question": "How can I use the CodebaseChunker class to chunk Python files in a specified directory?",
+    "answer": "You can use the CodebaseChunker class by creating an instance with the path to the directory containing your Python files. Then, call the chunk_codebase method to process all the .py files in that directory, which will return a list of code chunks. For example:\n\n```python\nchunker = CodebaseChunker('/path/to/codebase')\nchunks = chunker.chunk_codebase()\n```",
+    "context": {
+      "file": "./dataset_creation/codebase_chunker.py",
+      "chunk_text": "import os\nimport ast\nfrom typing import List, Dict, Any\nfrom utils.ast_parser import parse_ast\nimport tiktoken\nfrom tqdm import tqdm\n\nclass CodebaseChunker:\n\n    def __init__(self, codebase_path):\n        self.codebase_path = codebase_path\n        self.tokenizer = tiktoken.get_encoding('cl100k_base')\n        self.max_tokens = 1024\n\n    def chunk_codebase(self):\n        chunks = []\n        if not os.path.exists(self.codebase_path):\n            raise FileNotFoundError(f'Codebase directory not found: {self.codebase_path}')\n        python_files = [os.path.join(root, file) for root, _, files in os.walk(self.codebase_path) for file in files if file.endswith('.py')]\n        for file_path in tqdm(python_files, desc='Chunking codebase', unit='file'):\n            print(f'Chunking: {file_path}')\n            try:\n                with open(file_path, 'r') as f:\n                    content = f.read()\n                ast_tree = parse_ast(content)\n                file_chunks = self._generate_chunks(ast_tree, file_path)\n                chunks.extend(file_chunks)\n            except FileNotFoundError:\n                print(f'Warning: File not found: {file_path}')\n            except IOError as e:\n                print(f'Error reading file {file_path}: {e}')\n            except Exception as e:\n                print(f'Unexpected error processing file {file_path}: {e}')\n        return chunks\n\n    def _generate_chunks(self, tree: ast.AST, file_path: str) -> List[Dict[str, Any]]:\n        chunks = []\n        function_chunks = self._get_function_chunks(tree, file_path)\n        chunks.extend(function_chunks)\n        file_chunk = self._get_file_chunk(tree, file_path)\n        chunks.append(file_chunk)\n        return chunks\n\n    def _get_function_chunks(self, tree: ast.AST, file_path: str) -> List[Dict[str, Any]]:\n        function_chunks = []\n        for node in ast.walk(tree):\n            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):\n                chunk = self._create_chunk(node, file_path)\n                if chunk:\n                    function_chunks.append(chunk)\n        return function_chunks\n\n    def _get_file_chunk(self, tree: ast.AST, file_path: str) -> Dict[str, Any]:\n        return {'type': 'file', 'content': ast.unparse(tree), 'metadata': {'file': file_path, 'name': os.path.basename(file_path)}}\n\n    def _create_chunk(self, node: ast.AST, file_path: str) -> Dict[str, Any]:\n        content = ast.unparse(node)\n        tokens = self.tokenizer.encode(content)\n        if len(tokens) <= self.max_tokens:\n            return {'type': 'function' if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else 'class', 'content': content, 'metadata': {'file': file_path, 'name': node.name, 'lineno': node.lineno, 'end_lineno': node.end_lineno}}\n        else:\n            return self._split_large_chunk(node, file_path)\n\n    def _split_large_chunk(self, node: ast.AST, file_path: str) -> List[Dict[str, Any]]:\n        chunks = []\n        content = ast.unparse(node)\n        tokens = self.tokenizer.encode(content)\n        start = 0\n        while start < len(tokens):\n            end = start + self.max_tokens\n            chunk_tokens = tokens[start:end]\n            chunk_content = self.tokenizer.decode(chunk_tokens)\n            chunks.append({'type': 'function_part' if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else 'class_part', 'content': chunk_content, 'metadata': {'file': file_path, 'name': f'{node.name}_part_{len(chunks) + 1}', 'original_name': node.name, 'lineno': node.lineno, 'end_lineno': node.end_lineno}})\n            start = end\n        return chunks\n\n    def _print_chunks(self, chunks: List[Dict[str, Any]]):\n        for chunk in chunks:\n            print('\\n--- Chunk ---')\n            print(f\"Type: {chunk['type']}\")\n            print(f\"Metadata: {chunk['metadata']}\")\n            print('Content:')\n            print(chunk['content'])\n            print('--- End Chunk ---\\n')\n\n    def get_multi_file_chunks(self, max_tokens: int=4096) -> List[Dict[str, Any]]:\n        all_chunks = self.chunk_codebase()\n        multi_file_chunks = []\n        current_chunk = {'type': 'multi_file', 'content': '', 'metadata': {'files': []}}\n        current_tokens = 0\n        for chunk in all_chunks:\n            chunk_tokens = len(chunk['content'].split())\n            if current_tokens + chunk_tokens > max_tokens:\n                if current_chunk['content']:\n                    multi_file_chunks.append(current_chunk)\n                current_chunk = {'type': 'multi_file', 'content': '', 'metadata': {'files': []}}\n                current_tokens = 0\n            current_chunk['content'] += chunk['content'] + '\\n\\n'\n            current_chunk['metadata']['files'].append(chunk['metadata']['file'])\n            current_tokens += chunk_tokens\n        if current_chunk['content']:\n            multi_file_chunks.append(current_chunk)\n        return multi_file_chunks"
+    }
+  },
+  {
+    "question": "How can I use the DatasetManager class to save and load a dataset of question-answer pairs?",
+    "answer": "You can use the DatasetManager class by creating an instance of it with a specified dataset path. To save a dataset, call the save_dataset method and pass it the list of question-answer pairs. To load the dataset, call the load_dataset method, which will return the previously saved data.",
+    "context": {
+      "file": "./dataset_creation/dataset_manager.py",
+      "chunk_text": "class DatasetManager:\n\n    def __init__(self, dataset_path):\n        self.dataset_path = dataset_path\n\n    def save_dataset(self, qa_pairs):\n        with open(self.dataset_path, 'w') as f:\n            json.dump(qa_pairs, f)\n\n    def load_dataset(self):\n        with open(self.dataset_path, 'r') as f:\n            return json.load(f)"
+    }
+  },
+  {
+    "question": "How can I use the class that contains the __init__ method to load a dataset from a specified path?",
+    "answer": "To use the class, you need to create an instance of it by passing the dataset path as an argument to the constructor. For example:\n\n```python\nmy_instance = MyClass('path/to/dataset')\n```\nThis will initialize the instance with the provided dataset path, allowing you to access it through `my_instance.dataset_path`.",
+    "context": {
+      "file": "./dataset_creation/dataset_manager.py",
+      "chunk_text": "def __init__(self, dataset_path):\n    self.dataset_path = dataset_path"
+    }
+  },
+  {
+    "question": "How can I use the save_dataset method to save my question-answer pairs to a file?",
+    "answer": "You can call the save_dataset method and pass your list of question-answer pairs as an argument. The method will open a file at the path specified by dataset_path and write the pairs in JSON format.",
+    "context": {
+      "file": "./dataset_creation/dataset_manager.py",
+      "chunk_text": "def save_dataset(self, qa_pairs):\n    with open(self.dataset_path, 'w') as f:\n        json.dump(qa_pairs, f)"
+    }
+  },
+  {
+    "question": "Where is the load_dataset function implemented, and how does it load the dataset from a file?",
+    "answer": "The load_dataset function is implemented within a class and is responsible for loading a dataset from a specified file path. It opens the file located at self.dataset_path in read mode and uses the json.load function to parse the contents of the file, returning the loaded JSON data.",
+    "context": {
+      "file": "./dataset_creation/dataset_manager.py",
+      "chunk_text": "def load_dataset(self):\n    with open(self.dataset_path, 'r') as f:\n        return json.load(f)"
+    }
+  },
+  {
+    "question": "How can I use the DatasetManager class to save and load a dataset of question-answer pairs?",
+    "answer": "You can use the DatasetManager class by creating an instance with the desired dataset path. To save a dataset, call the save_dataset method with the question-answer pairs as an argument. To load the dataset, use the load_dataset method, which will return the saved question-answer pairs from the specified path.",
+    "context": {
+      "file": "./dataset_creation/dataset_manager.py",
+      "chunk_text": "import json\n\nclass DatasetManager:\n\n    def __init__(self, dataset_path):\n        self.dataset_path = dataset_path\n\n    def save_dataset(self, qa_pairs):\n        with open(self.dataset_path, 'w') as f:\n            json.dump(qa_pairs, f)\n\n    def load_dataset(self):\n        with open(self.dataset_path, 'r') as f:\n            return json.load(f)"
+    }
+  },
+  {
+    "question": "How can I use the QAGenerator class to generate question-answer pairs from a list of code chunks?",
+    "answer": "You can create an instance of the QAGenerator class by passing a list of code chunks to its constructor. Then, call the generate_qa_pairs method to generate the question-answer pairs and save them to the specified output file.",
+    "context": {
+      "file": "./dataset_creation/qa_generator.py",
+      "chunk_text": "class QAGenerator:\n\n    def __init__(self, chunks, output_file='qa_pairs.json'):\n        self.chunks = chunks\n        self.output_file = output_file\n\n    def generate_qa_pairs(self):\n        qa_pairs = []\n        for i, chunk in enumerate(tqdm(self.chunks, desc='Generating Q&A pairs', unit='chunk')):\n            qa_pair = generate_qa_pair(chunk, i)\n            qa_pairs.append(qa_pair)\n            self._write_to_json(qa_pairs)\n        return qa_pairs\n\n    def _write_to_json(self, qa_pairs):\n        with open(self.output_file, 'w') as f:\n            json.dump(qa_pairs, f, indent=2)"
+    }
+  },
+  {
+    "question": "How can I use the class that contains the __init__ method to initialize it with a custom output file?",
+    "answer": "You can create an instance of the class by passing the required 'chunks' argument and an optional 'output_file' argument. For example: instance = ClassName(chunks, 'custom_output.json'). If you do not specify 'output_file', it will default to 'qa_pairs.json'.",
+    "context": {
+      "file": "./dataset_creation/qa_generator.py",
+      "chunk_text": "def __init__(self, chunks, output_file='qa_pairs.json'):\n    self.chunks = chunks\n    self.output_file = output_file"
+    }
+  },
+  {
+    "question": "What methods are utilized within the generate_qa_pairs function to process and save question-answer pairs?",
+    "answer": "The generate_qa_pairs function uses a loop to iterate over chunks of data, calling the generate_qa_pair method for each chunk to create a question-answer pair. Additionally, it employs the _write_to_json method to save the accumulated pairs to a JSON file.",
+    "context": {
+      "file": "./dataset_creation/qa_generator.py",
+      "chunk_text": "def generate_qa_pairs(self):\n    qa_pairs = []\n    for i, chunk in enumerate(tqdm(self.chunks, desc='Generating Q&A pairs', unit='chunk')):\n        qa_pair = generate_qa_pair(chunk, i)\n        qa_pairs.append(qa_pair)\n        self._write_to_json(qa_pairs)\n    return qa_pairs"
+    }
+  },
+  {
+    "question": "How can I use the _write_to_json method to save a list of question-answer pairs to a JSON file?",
+    "answer": "You can call the _write_to_json method and pass a list of question-answer pairs as the qa_pairs argument. This method will open the file specified in the output_file attribute and write the qa_pairs to it in JSON format with an indentation of 2 for better readability.",
+    "context": {
+      "file": "./dataset_creation/qa_generator.py",
+      "chunk_text": "def _write_to_json(self, qa_pairs):\n    with open(self.output_file, 'w') as f:\n        json.dump(qa_pairs, f, indent=2)"
+    }
+  },
+  {
+    "question": "How can I use the QAGenerator class to generate question-answer pairs from a list of code chunks?",
+    "answer": "You can use the QAGenerator class by instantiating it with a list of code chunks. Then, call the generate_qa_pairs method to generate and save the question-answer pairs to a JSON file. For example: qa_generator = QAGenerator(chunks); qa_pairs = qa_generator.generate_qa_pairs(). This will create a JSON file named 'qa_pairs.json' containing the generated pairs.",
+    "context": {
+      "file": "./dataset_creation/qa_generator.py",
+      "chunk_text": "import json\nfrom utils.llm_interface import generate_qa_pair\nfrom tqdm import tqdm\n\nclass QAGenerator:\n\n    def __init__(self, chunks, output_file='qa_pairs.json'):\n        self.chunks = chunks\n        self.output_file = output_file\n\n    def generate_qa_pairs(self):\n        qa_pairs = []\n        for i, chunk in enumerate(tqdm(self.chunks, desc='Generating Q&A pairs', unit='chunk')):\n            qa_pair = generate_qa_pair(chunk, i)\n            qa_pairs.append(qa_pair)\n            self._write_to_json(qa_pairs)\n        return qa_pairs\n\n    def _write_to_json(self, qa_pairs):\n        with open(self.output_file, 'w') as f:\n            json.dump(qa_pairs, f, indent=2)"
+    }
+  },
+  {
+    "question": "How can I use the parse_ast function to parse a given Python code string into an Abstract Syntax Tree (AST)?",
+    "answer": "You can use the parse_ast function by passing a string containing Python code as an argument. The function will return the corresponding Abstract Syntax Tree (AST) representation of that code.",
+    "context": {
+      "file": "./utils/ast_parser.py",
+      "chunk_text": "def parse_ast(code):\n    return ast.parse(code)"
+    }
+  },
+  {
+    "question": "How can I use the parse_ast function to convert a Python code string into an Abstract Syntax Tree (AST)?",
+    "answer": "You can use the parse_ast function by passing a string of Python code to it, and it will return the corresponding Abstract Syntax Tree representation of that code. For example, calling parse_ast('print(\"Hello, World!\")') will parse this string and give you an AST object that represents the print statement.",
+    "context": {
+      "file": "./utils/ast_parser.py",
+      "chunk_text": "import ast\n\ndef parse_ast(code):\n    return ast.parse(code)"
+    }
+  },
+  {
+    "question": "How can I modify the load_question_templates function to handle cases where the questions_template.json file is missing or improperly formatted?",
+    "answer": "You can add a try-except block around the file opening and JSON loading process to catch FileNotFoundError and JSONDecodeError. This will allow you to handle errors gracefully and provide feedback if the file is missing or contains invalid JSON.",
+    "context": {
+      "file": "./utils/llm_interface.py",
+      "chunk_text": "def load_question_templates():\n    script_dir = os.path.dirname(os.path.abspath(__file__))\n    file_path = os.path.join(script_dir, 'questions_template.json')\n    with open(file_path, 'r') as f:\n        templates = json.load(f)\n    return templates['questionTemplates']"
+    }
+  },
+  {
+    "question": "How can I use the load_prompt_template function to read the contents of the qa_prompt.txt file?",
+    "answer": "You can call the load_prompt_template function, which will locate the qa_prompt.txt file in the same directory as the script and return its contents as a string.",
+    "context": {
+      "file": "./utils/llm_interface.py",
+      "chunk_text": "def load_prompt_template():\n    script_dir = os.path.dirname(os.path.abspath(__file__))\n    file_path = os.path.join(script_dir, 'qa_prompt.txt')\n    with open(file_path, 'r') as f:\n        return f.read()"
+    }
+  },
+  {
+    "question": "How does the generate_qa_pair function create a question-answer pair from a code chunk?",
+    "answer": "The generate_qa_pair function processes a code chunk by first loading question templates and a prompt template. It then formats the chunk content and metadata into a prompt, which is sent to a model (like 'gpt-4o-mini-2024-07-18') for generating a response. The response, expected in a JSON format, is parsed to extract the question-answer pair, which includes context about the chunk.",
+    "context": {
+      "file": "./utils/llm_interface.py",
+      "chunk_text": "def generate_qa_pair(chunk, chunk_index):\n    templates = load_question_templates()\n    prompt_template = load_prompt_template()\n    if isinstance(chunk, list):\n        chunk_content = '\\n\\n'.join((c['content'] for c in chunk))\n        chunk_file = chunk[0]['metadata']['file']\n    else:\n        chunk_content = chunk['content']\n        chunk_file = chunk['metadata']['file']\n    prompt = prompt_template.format(code_chunk=chunk_content, templates=json.dumps(templates, indent=2))\n    response = client.chat.completions.create(model='gpt-4o-mini-2024-07-18', messages=[{'role': 'system', 'content': 'You are a helpful assistant that generates relevant question-answer pairs for code chunks.'}, {'role': 'user', 'content': prompt}], max_tokens=300, n=1, stop=None, temperature=0.7)\n    try:\n        content = response.choices[0].message.content.strip()\n        json_content = content.split('```json\\n')[1].split('\\n```')[0]\n        qa_pair = json.loads(json_content)\n        qa_pair['context'] = {'file': chunk_file, 'chunk_text': chunk_content}\n    except Exception as e:\n        print(f'Error processing chunk {chunk_index}: {str(e)}')\n        qa_pair = {'question': 'Error generating question', 'answer': 'Error generating answer', 'context': {'file': chunk_file, 'chunk_text': chunk_content}}\n    return qa_pair"
+    }
+  },
+  {
+    "question": "How can I use the get_model_response function to retrieve a response from a specified model given its path and a question?",
+    "answer": "The get_model_response function is designed to accept two parameters: model_path, which indicates the location of the model, and question, which is the inquiry you want the model to respond to. To use this function, you would need to provide valid arguments for both parameters, after which it is expected to return a response from the model.",
+    "context": {
+      "file": "./utils/llm_interface.py",
+      "chunk_text": "def get_model_response(model_path, question):\n    pass"
+    }
+  },
+  {
+    "question": "How can I implement the evaluate_answer function to compare the expected_answer with the model_answer?",
+    "answer": "To implement the evaluate_answer function, you can use comparison operators to check if the expected_answer matches the model_answer. You might also consider normalizing the answers (e.g., trimming whitespace, converting to lowercase) before comparison to ensure consistent evaluation.",
+    "context": {
+      "file": "./utils/llm_interface.py",
+      "chunk_text": "def evaluate_answer(expected_answer, model_answer):\n    pass"
+    }
+  },
+  {
+    "question": "How can I use the OpenAI client to generate question-answer pairs from code chunks?",
+    "answer": "You can use the OpenAI client by calling the 'generate_qa_pair' function, which takes a code chunk and an index as parameters. This function loads question templates and a prompt template, prepares the prompt with the provided code chunk, and sends it to the OpenAI API to receive a generated question-answer pair.",
+    "context": {
+      "file": "./utils/llm_interface.py",
+      "chunk_text": "import os\nimport json\nfrom openai import OpenAI\nclient = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))\n\ndef load_question_templates():\n    script_dir = os.path.dirname(os.path.abspath(__file__))\n    file_path = os.path.join(script_dir, 'questions_template.json')\n    with open(file_path, 'r') as f:\n        templates = json.load(f)\n    return templates['questionTemplates']\n\ndef load_prompt_template():\n    script_dir = os.path.dirname(os.path.abspath(__file__))\n    file_path = os.path.join(script_dir, 'qa_prompt.txt')\n    with open(file_path, 'r') as f:\n        return f.read()\n\ndef generate_qa_pair(chunk, chunk_index):\n    templates = load_question_templates()\n    prompt_template = load_prompt_template()\n    if isinstance(chunk, list):\n        chunk_content = '\\n\\n'.join((c['content'] for c in chunk))\n        chunk_file = chunk[0]['metadata']['file']\n    else:\n        chunk_content = chunk['content']\n        chunk_file = chunk['metadata']['file']\n    prompt = prompt_template.format(code_chunk=chunk_content, templates=json.dumps(templates, indent=2))\n    response = client.chat.completions.create(model='gpt-4o-mini-2024-07-18', messages=[{'role': 'system', 'content': 'You are a helpful assistant that generates relevant question-answer pairs for code chunks.'}, {'role': 'user', 'content': prompt}], max_tokens=300, n=1, stop=None, temperature=0.7)\n    try:\n        content = response.choices[0].message.content.strip()\n        json_content = content.split('```json\\n')[1].split('\\n```')[0]\n        qa_pair = json.loads(json_content)\n        qa_pair['context'] = {'file': chunk_file, 'chunk_text': chunk_content}\n    except Exception as e:\n        print(f'Error processing chunk {chunk_index}: {str(e)}')\n        qa_pair = {'question': 'Error generating question', 'answer': 'Error generating answer', 'context': {'file': chunk_file, 'chunk_text': chunk_content}}\n    return qa_pair\n\ndef get_model_response(model_path, question):\n    pass\n\ndef evaluate_answer(expected_answer, model_answer):\n    pass"
+    }
+  },
+  {
+    "question": "What metrics does the calculate_context_metrics function aim to compute based on the expected and retrieved contexts?",
+    "answer": "The calculate_context_metrics function is designed to analyze and compute various metrics that compare the expected context against the retrieved context, although the specific metrics and their calculation methods are not provided in the current implementation.",
+    "context": {
+      "file": "./utils/metrics_calculator.py",
+      "chunk_text": "def calculate_context_metrics(expected_context, retrieved_context):\n    pass"
+    }
+  },
+  {
+    "question": "How can I extend the calculate_context_metrics function to include additional metrics for context evaluation?",
+    "answer": "To extend the calculate_context_metrics function, you can add parameters for the new metrics you want to calculate and implement the logic for those calculations within the function body.",
+    "context": {
+      "file": "./utils/metrics_calculator.py",
+      "chunk_text": "def calculate_context_metrics(expected_context, retrieved_context):\n    pass"
+    }
+  },
+  {
+    "question": "How can I use the ModelTester class to evaluate the performance of a model with a set of question-answer pairs?",
+    "answer": "To use the ModelTester class, create an instance by passing the model path to the constructor. Then, call the test_model method with a list of dictionaries containing 'question' and 'answer' keys for each QA pair. The method will return a list of results containing the questions, expected answers, model answers, and context.",
+    "context": {
+      "file": "./benchmarking/model_tester.py",
+      "chunk_text": "class ModelTester:\n\n    def __init__(self, model_path):\n        self.model_path = model_path\n\n    def test_model(self, qa_pairs):\n        results = []\n        for qa_pair in qa_pairs:\n            question = qa_pair['question']\n            expected_answer = qa_pair['answer']\n            model_answer, context = get_model_response(self.model_path, question)\n            results.append({'question': question, 'expected_answer': expected_answer, 'model_answer': model_answer, 'context': context})\n        return results"
+    }
+  },
+  {
+    "question": "How can I use the class that contains the __init__ method to initialize a model with a specific path?",
+    "answer": "You can use the class by creating an instance of it and passing the desired model path as an argument to the constructor. For example: model_instance = ClassName(model_path='path/to/model'). This will set the model_path attribute to the provided path.",
+    "context": {
+      "file": "./benchmarking/model_tester.py",
+      "chunk_text": "def __init__(self, model_path):\n    self.model_path = model_path"
+    }
+  },
+  {
+    "question": "How can I modify the test_model function to include additional metrics for evaluating the model's performance?",
+    "answer": "To modify the test_model function, you can add more calculations for metrics such as accuracy, precision, and recall based on the model's answers compared to the expected answers. You would need to import the necessary libraries for these calculations and incorporate them within the loop that processes each qa_pair.",
+    "context": {
+      "file": "./benchmarking/model_tester.py",
+      "chunk_text": "def test_model(self, qa_pairs):\n    results = []\n    for qa_pair in qa_pairs:\n        question = qa_pair['question']\n        expected_answer = qa_pair['answer']\n        model_answer, context = get_model_response(self.model_path, question)\n        results.append({'question': question, 'expected_answer': expected_answer, 'model_answer': model_answer, 'context': context})\n    return results"
+    }
+  },
+  {
+    "question": "How can I use the ModelTester class to test a set of question-answer pairs with a specific model?",
+    "answer": "You can create an instance of the ModelTester class by providing the model's path to the constructor. Then, call the test_model method with a list of dictionaries containing question-answer pairs, where each dictionary has 'question' and 'answer' keys. The method will return a list of results that include the question, expected answer, model's answer, and context.",
+    "context": {
+      "file": "./benchmarking/model_tester.py",
+      "chunk_text": "from utils.llm_interface import get_model_response\n\nclass ModelTester:\n\n    def __init__(self, model_path):\n        self.model_path = model_path\n\n    def test_model(self, qa_pairs):\n        results = []\n        for qa_pair in qa_pairs:\n            question = qa_pair['question']\n            expected_answer = qa_pair['answer']\n            model_answer, context = get_model_response(self.model_path, question)\n            results.append({'question': question, 'expected_answer': expected_answer, 'model_answer': model_answer, 'context': context})\n        return results"
+    }
+  },
+  {
+    "question": "How can I use the ContextEvaluator class to evaluate context scores from a list of results?",
+    "answer": "To use the ContextEvaluator class, create an instance of the class and call the evaluate method with a list of result dictionaries. Each dictionary should contain 'expected_answer' with a 'context' key and a 'context' key for the retrieved context. The evaluate method will compute context scores for each result and return the aggregated score.",
+    "context": {
+      "file": "./benchmarking/context_evaluator.py",
+      "chunk_text": "class ContextEvaluator:\n\n    def evaluate(self, results):\n        context_scores = []\n        for result in results:\n            expected_context = result['expected_answer']['context']\n            retrieved_context = result['context']\n            score = calculate_context_metrics(expected_context, retrieved_context)\n            context_scores.append(score)\n        return self._aggregate_scores(context_scores)\n\n    def _aggregate_scores(self, scores):\n        return sum(scores) / len(scores) if scores else 0"
+    }
+  },
+  {
+    "question": "What algorithm does the calculate_context_metrics function use to evaluate the similarity between expected and retrieved contexts?",
+    "answer": "The calculate_context_metrics function likely implements a scoring algorithm that compares the expected context with the retrieved context to quantify their similarity. The specific metrics used can vary, but common approaches include cosine similarity, Jaccard index, or other NLP-based similarity measures.",
+    "context": {
+      "file": "./benchmarking/context_evaluator.py",
+      "chunk_text": "def evaluate(self, results):\n    context_scores = []\n    for result in results:\n        expected_context = result['expected_answer']['context']\n        retrieved_context = result['context']\n        score = calculate_context_metrics(expected_context, retrieved_context)\n        context_scores.append(score)\n    return self._aggregate_scores(context_scores)"
+    }
+  },
+  {
+    "question": "How does the _aggregate_scores method calculate the average of the scores list?",
+    "answer": "The _aggregate_scores method calculates the average by summing all the scores in the list and dividing by the length of the list. If the list is empty, it returns 0 to avoid division by zero.",
+    "context": {
+      "file": "./benchmarking/context_evaluator.py",
+      "chunk_text": "def _aggregate_scores(self, scores):\n    return sum(scores) / len(scores) if scores else 0"
+    }
+  },
+  {
+    "question": "How can I use the ContextEvaluator class to evaluate context scores for a list of results?",
+    "answer": "To use the ContextEvaluator class, you first need to create an instance of the class. Then, you can call the evaluate method with a list of results, where each result should contain the expected answer's context and the retrieved context. The evaluate method will compute the context scores using the calculate_context_metrics function and return the aggregated score.",
+    "context": {
+      "file": "./benchmarking/context_evaluator.py",
+      "chunk_text": "from utils.metrics_calculator import calculate_context_metrics\n\nclass ContextEvaluator:\n\n    def evaluate(self, results):\n        context_scores = []\n        for result in results:\n            expected_context = result['expected_answer']['context']\n            retrieved_context = result['context']\n            score = calculate_context_metrics(expected_context, retrieved_context)\n            context_scores.append(score)\n        return self._aggregate_scores(context_scores)\n\n    def _aggregate_scores(self, scores):\n        return sum(scores) / len(scores) if scores else 0"
+    }
+  },
+  {
+    "question": "How does the evaluate method in the AnswerEvaluator class compute the scores for the answers?",
+    "answer": "The evaluate method iterates over a list of results, extracting the expected answer and the model answer for each result. It then calls the evaluate_answer function to compute a score for each pair of answers. All computed scores are collected into a list, which is subsequently passed to the _aggregate_scores method to calculate the average score, which is returned as the final evaluation.",
+    "context": {
+      "file": "./benchmarking/answer_evaluator.py",
+      "chunk_text": "class AnswerEvaluator:\n\n    def evaluate(self, results):\n        answer_scores = []\n        for result in results:\n            expected_answer = result['expected_answer']['answer']\n            model_answer = result['model_answer']\n            score = evaluate_answer(expected_answer, model_answer)\n            answer_scores.append(score)\n        return self._aggregate_scores(answer_scores)\n\n    def _aggregate_scores(self, scores):\n        return sum(scores) / len(scores) if scores else 0"
+    }
+  },
+  {
+    "question": "How does the evaluate method compute the scores for model answers compared to expected answers?",
+    "answer": "The evaluate method iterates over a list of results, extracting the expected answer and the model answer for each result. It then uses the evaluate_answer function to compute a score for each pair of answers, collecting these scores in the answer_scores list. Finally, it aggregates the scores using the _aggregate_scores method before returning the final result.",
+    "context": {
+      "file": "./benchmarking/answer_evaluator.py",
+      "chunk_text": "def evaluate(self, results):\n    answer_scores = []\n    for result in results:\n        expected_answer = result['expected_answer']['answer']\n        model_answer = result['model_answer']\n        score = evaluate_answer(expected_answer, model_answer)\n        answer_scores.append(score)\n    return self._aggregate_scores(answer_scores)"
+    }
+  },
+  {
+    "question": "How does the _aggregate_scores method calculate the average score, and what happens if the scores list is empty?",
+    "answer": "The _aggregate_scores method calculates the average score by summing all the scores in the provided list and dividing by the number of scores. If the scores list is empty, it returns 0 to avoid a division by zero error.",
+    "context": {
+      "file": "./benchmarking/answer_evaluator.py",
+      "chunk_text": "def _aggregate_scores(self, scores):\n    return sum(scores) / len(scores) if scores else 0"
+    }
+  },
+  {
+    "question": "How can I use the AnswerEvaluator class to evaluate the performance of model answers against expected answers?",
+    "answer": "You can use the AnswerEvaluator class by creating an instance of it and calling the evaluate method with a list of results. Each result should be a dictionary containing the expected answer and the model answer. The evaluate method will return the aggregated score of the model answers.",
+    "context": {
+      "file": "./benchmarking/answer_evaluator.py",
+      "chunk_text": "from utils.llm_interface import evaluate_answer\n\nclass AnswerEvaluator:\n\n    def evaluate(self, results):\n        answer_scores = []\n        for result in results:\n            expected_answer = result['expected_answer']['answer']\n            model_answer = result['model_answer']\n            score = evaluate_answer(expected_answer, model_answer)\n            answer_scores.append(score)\n        return self._aggregate_scores(answer_scores)\n\n    def _aggregate_scores(self, scores):\n        return sum(scores) / len(scores) if scores else 0"
+    }
+  }
+]
