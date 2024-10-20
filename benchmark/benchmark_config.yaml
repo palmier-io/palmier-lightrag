@@ -1,0 +1,22 @@
+create_dataset:
+  # Path to the codebase that will be used to generate the dataset
+  codebase_path: "../../palmier-lightrag"
+  # Path where the generated dataset (question-answer pairs) will be saved
+  dataset_path: "./qa_pairs.json"
+
+run_benchmark:
+  # Path to the dataset file containing question-answer pairs for benchmarking
+  dataset_path: "./qa_pairs.json"
+  # Path to the directory containing the model to be tested. This isn't being used at the moment.
+  testing_model_path: "./model"
+  # Name of the model being tested. GPT-4o-mini is used by default and is currently the only model supported.
+  testing_model_name: "gpt-4o-mini"
+  # Path where the benchmark results will be saved
+  results_path: "./benchmark_results.json"
+  # Weight given to the context relevance in the evaluation (30%)
+  context_weight: 0.3
+  # Weight given to the answer quality in the evaluation (70%)
+  answer_weight: 0.7
+
+
+

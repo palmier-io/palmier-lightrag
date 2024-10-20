@@ -1,0 +1,10 @@
+Given the following code chunk:
+
+{code_chunk}
+
+Generate a question-answer pair based on the following template using an appropriate template from the following list:
+{templates}
+
+Ensure the question is relevant to the code chunk and follows the template's style.
+Output the result as a JSON object with 'question' and 'answer' fields.
+
