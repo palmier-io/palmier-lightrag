@@ -70,7 +70,9 @@ def generate_qa_pair(chunk, chunk_index):
 
     return qa_pair
 
+
 def get_model_response(model_name, question):
+    # Add suppport for other models (i.e. Cursor, and our own RAG implementation on the specific codebase it's beign tested on)
     if model_name == "gpt-4o-mini":
         response = client.chat.completions.create(
             model="gpt-4o-mini",

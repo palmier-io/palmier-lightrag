@@ -1,26 +1,18 @@
 [
   {
-    "question": "How can I use the DatasetManager class to load a dataset for benchmarking?",
-    "answer": "You can use the DatasetManager class by creating an instance of it with the dataset path as an argument. Then, call the load_dataset method on the instance to retrieve the question-answer pairs, which can be passed to the ModelTester for evaluation.",
+    "question": "How can I use the LightRAG class to query different modes of information retrieval?",
+    "answer": "You can use the LightRAG class by creating an instance with a specified working directory and language model function. Then, you can call the 'query' method with a string input and a QueryParam object that specifies the mode (e.g., 'naive', 'local', 'global', 'hybrid') to get different responses based on the selected mode.",
     "context": {
-      "file": "./run_benchmark.py",
-      "chunk_text": "def main():\n    dataset_manager = DatasetManager(DATASET_PATH)\n    print('\\nStarting benchmarking phase...')\n    model_tester = ModelTester(MODEL_PATH)\n    qa_pairs = dataset_manager.load_dataset()\n    results = model_tester.test_model(qa_pairs)\n    context_evaluator = ContextEvaluator()\n    context_scores = context_evaluator.evaluate(results)\n    answer_evaluator = AnswerEvaluator()\n    answer_scores = answer_evaluator.evaluate(results)\n    print('Context Evaluation Scores:', context_scores)\n    print('Answer Evaluation Scores:', answer_scores)"
+      "file": "../../palmier-lightrag/query.py",
+      "chunk_text": "from lightrag import LightRAG, QueryParam\nfrom lightrag.llm import gpt_4o_mini_complete, gpt_4o_complete\nimport os\nWORKING_DIR = './ragtest'\nif not os.path.exists(WORKING_DIR):\n    os.mkdir(WORKING_DIR)\nrag = LightRAG(working_dir=WORKING_DIR, llm_model_func=gpt_4o_mini_complete)\nprint(rag.query('what happens when i click the palmier tab button?', param=QueryParam(mode='naive')))\nprint(rag.query('what happens when i click the palmier tab button?', param=QueryParam(mode='local')))\nprint(rag.query('what happens when i click the palmier tab button?', param=QueryParam(mode='global')))\nprint(rag.query('what happens when i click the palmier tab button?', param=QueryParam(mode='hybrid')))"
     }
   },
   {
-    "question": "How can I use the DatasetManager class to load a dataset for benchmarking?",
-    "answer": "You can use the DatasetManager class to load a dataset by creating an instance of the class with the path to your dataset file. For example, in the main function, an instance is created with 'dataset_manager = DatasetManager(DATASET_PATH)', and the dataset is loaded using 'qa_pairs = dataset_manager.load_dataset()'. This will return the question-answer pairs needed for benchmarking.",
+    "question": "How can I use the LightRAG class to insert texts from files into the working directory?",
+    "answer": "You can use the LightRAG class by first creating an instance with a specified working directory and a language model function. Then, read the contents of text files located in the 'input' folder and append them to a list. Finally, call the 'insert' method on the LightRAG instance with this list of texts to insert them into the working directory.",
     "context": {
-      "file": "./run_benchmark.py",
-      "chunk_text": "from dataset_creation.dataset_manager import DatasetManager\nfrom benchmarking.model_tester import ModelTester\nfrom benchmarking.context_evaluator import ContextEvaluator\nfrom benchmarking.answer_evaluator import AnswerEvaluator\nCODEBASE_PATH = './'\nDATASET_PATH = './dataset.json'\nMODEL_PATH = './model'\n\ndef main():\n    dataset_manager = DatasetManager(DATASET_PATH)\n    print('\\nStarting benchmarking phase...')\n    model_tester = ModelTester(MODEL_PATH)\n    qa_pairs = dataset_manager.load_dataset()\n    results = model_tester.test_model(qa_pairs)\n    context_evaluator = ContextEvaluator()\n    context_scores = context_evaluator.evaluate(results)\n    answer_evaluator = AnswerEvaluator()\n    answer_scores = answer_evaluator.evaluate(results)\n    print('Context Evaluation Scores:', context_scores)\n    print('Answer Evaluation Scores:', answer_scores)\nif __name__ == '__main__':\n    main()"
-    }
-  },
-  {
-    "question": "How can I use the QAGenerator class to create question-answer pairs from the codebase chunks?",
-    "answer": "You can use the QAGenerator class by initializing it with the codebase chunks obtained from the CodebaseChunker. After that, call the generate_qa_pairs method to create the question-answer pairs based on the provided chunks.",
-    "context": {
-      "file": "./create_dataset.py",
-      "chunk_text": "def main():\n    print('Starting dataset creation phase...')\n    chunker = CodebaseChunker(CODEBASE_PATH)\n    chunks = chunker.chunk_codebase()\n    qa_generator = QAGenerator(chunks)\n    qa_pairs = qa_generator.generate_qa_pairs()\n    dataset_manager = DatasetManager(DATASET_PATH)\n    dataset_manager.save_dataset(qa_pairs)\n    print(f'Dataset created and saved to {DATASET_PATH}')"
+      "file": "../../palmier-lightrag/index.py",
+      "chunk_text": "from lightrag import LightRAG\nfrom lightrag.llm import gpt_4o_mini_complete, gpt_4o_complete\nimport os\nWORKING_DIR = './ragtest'\nif not os.path.exists(WORKING_DIR):\n    os.mkdir(WORKING_DIR)\nrag = LightRAG(working_dir=WORKING_DIR, llm_model_func=gpt_4o_mini_complete)\ninput_folder = os.path.join(WORKING_DIR, 'input')\ntexts_to_insert = []\nfor filename in os.listdir(input_folder):\n    if filename.endswith('.txt'):\n        file_path = os.path.join(input_folder, filename)\n        with open(file_path, 'r') as f:\n            texts_to_insert.append(f.read())\nrag.insert(texts_to_insert)"
     }
   }
 ]
