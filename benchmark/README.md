@@ -18,6 +18,12 @@ To install the necessary dependencies, run:
 pip install -r requirements.txt
 ```
 
+Create a `.env` file and add your OpenAI API key:
+
+```bash
+OPENAI_API_KEY=<your_openai_api_key>
+```
+
 ## Usage
 
 ### 1. Dataset Creation

@@ -126,7 +126,7 @@ def evaluate_answer(expected_answer, model_answer):
     Model's Answer:
     {model_answer}
 
-    Please provide a score for each criterion (between 0 and 1) and a brief explanation. Output your evaluation in JSON format with the following structure:
+    Please provide a score for each criterion (between 0 and 1) and a brief explanation of your reasoning. Output your evaluation in JSON format with the following structure:
     {{
         "accuracy": {{
             "score": <score>,
