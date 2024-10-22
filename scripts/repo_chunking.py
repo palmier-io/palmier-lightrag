@@ -1,22 +1,39 @@
 import os
 import requests
-from github import Github
+from github import Github, GithubException
 from dotenv import load_dotenv
+
 def chunk_repo(repo_url):
     # Load environment variables from .env file
     load_dotenv()
+
     # Extract owner and repo name from the URL
     _, _, _, owner, repo_name = repo_url.rstrip('/').split('/')
     print(f"Owner: {owner}, Repo: {repo_name}")
+
     # Initialize GitHub API client using the token from .env
-    g = Github(os.getenv('GITHUB_TOKEN'))
+    github_token = os.getenv('GITHUB_TOKEN')
+    if not github_token:
+        print("Error: GITHUB_TOKEN not found in .env file")
+        return
+    g = Github(github_token)
+
     # Get the repository
-    repo = g.get_repo(f"{owner}/{repo_name}")
+    try:
+        repo = g.get_repo(f"{owner}/{repo_name}")
+    except GithubException as e:
+        print(f"Error accessing repository: {e}")
+        print(f"Status code: {e.status}")
+        print(f"Data: {e.data}")
+        return
+
     # Create output directory if it doesn't exist
     output_dir = 'scripts/output'
     os.makedirs(output_dir, exist_ok=True)
+
     # List of common code file extensions
     code_extensions = ['.py', '.js', '.ts', '.java', '.c', '.cpp', '.cs', '.go', '.rb', '.php', '.swift', '.kt', '.rs', '.html', '.css', '.scss', '.sql']
+
     # Traverse through all files in the repository
     contents = repo.get_contents("")
     while contents:

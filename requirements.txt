@@ -13,3 +13,5 @@ accelerate
 transformers
 torch
 python-dotenv
+PyGithub
+plotly

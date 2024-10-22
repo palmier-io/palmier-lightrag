@@ -1,10 +1,14 @@
 import networkx as nx
 import os
 import plotly.graph_objects as go
+
 WORKING_DIR = "./ragtest"
 # Find all GraphML files in the directory and sort them alphabetically
 graphml_files = [f for f in os.listdir(WORKING_DIR) if f.endswith('.graphml')]
 graphml_files.sort()
+
+graphml_files = ['/Users/harrisontin/palmierio/palmier-lightrag/symbol_graph.graphml']
+
 def create_hover_text(attributes):
     return '<br>'.join([f'{k}: {v}' for k, v in attributes.items() if k != 'id'])
 # Loop through each GraphML file
