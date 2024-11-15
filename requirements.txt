@@ -1,11 +1,8 @@
 accelerate
 aioboto3
 aiohttp
-fastapi
-# lmdeploy[all]
 
-# Palmier
-fastapi-versioning
+# database packages
 graspologic
 hnswlib
 nano-vectordb
@@ -14,9 +11,12 @@ nest_asyncio
 networkx
 ollama
 openai
-pygments
+oracledb
 pyvis
 tenacity
+# lmdeploy[all]
+
+# LLM packages
 tiktoken
 torch
 transformers
