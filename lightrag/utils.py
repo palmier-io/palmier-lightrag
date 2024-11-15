@@ -285,6 +285,7 @@ def process_combine_contexts(hl, ll):
     combined_sources_result = [",".join(header)]
 
     for i, item in enumerate(combined_sources, start=1):
+        item = item.replace('"', '""')
         combined_sources_result.append(f"{i},\"{item}\"")
 
     combined_sources_result = "\n".join(combined_sources_result)
