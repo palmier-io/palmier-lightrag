@@ -269,25 +269,26 @@ def process_combine_contexts(hl, ll):
     if header is None:
         return ""
 
+    # Keep rows as lists instead of joining them
     if list_hl:
-        list_hl = [",".join(item[1:]) for item in list_hl if item]
+        list_hl = [item[1:] for item in list_hl if item]
     if list_ll:
-        list_ll = [",".join(item[1:]) for item in list_ll if item]
+        list_ll = [item[1:] for item in list_ll if item]
 
+    # Combine while maintaining list structure
     combined_sources = []
     seen = set()
 
     for item in list_hl + list_ll:
-        if item and item not in seen:
+        item_str = ','.join(item)  # Convert to string for deduplication
+        if item_str and item_str not in seen:
             combined_sources.append(item)
-            seen.add(item)
+            seen.add(item_str)
 
-    combined_sources_result = [",".join(header)]
-
+    # Create final list of lists with header and numbered rows
+    result_rows = [header]
     for i, item in enumerate(combined_sources, start=1):
-        item = item.replace('"', '""')
-        combined_sources_result.append(f"{i},\"{item}\"")
+        row = [str(i)] + item
+        result_rows.append(row)
 
-    combined_sources_result = "\n".join(combined_sources_result)
-
-    return combined_sources_result
+    return list_of_list_to_csv(result_rows)
