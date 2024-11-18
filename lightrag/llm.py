@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Callable, Any
 from .base import BaseKVStorage
 from .utils import compute_args_hash, wrap_embedding_func_with_attrs
+from anthropic import AsyncAnthropic
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -125,6 +126,60 @@ async def azure_openai_complete_if_cache(
         )
     return response.choices[0].message.content
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type((RateLimitError, APIConnectionError, Timeout)),
+)
+async def anthropic_complete_if_cache(
+    model,
+    prompt,
+    system_prompt=None,
+    history_messages=[],
+    api_key=None,
+    **kwargs,
+) -> str:
+    if api_key:
+        os.environ["ANTHROPIC_API_KEY"] = api_key
+
+    anthropic_client = AsyncAnthropic()
+    hashing_kv: BaseKVStorage = kwargs.pop("hashing_kv", None)
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.extend(history_messages)
+    messages.append({"role": "user", "content": prompt})
+    
+    if hashing_kv is not None:
+        args_hash = compute_args_hash(model, messages)
+        if_cache_return = await hashing_kv.get_by_id(args_hash)
+        if if_cache_return is not None:
+            return if_cache_return["return"]
+
+    # Convert messages to Anthropic format
+    anthropic_messages = []
+    for msg in messages:
+        if msg["role"] == "system":
+            # Anthropic doesn't support system messages directly, prepend to first user message
+            continue
+        anthropic_messages.append({"role": msg["role"], "content": msg["content"]})
+    
+    if system_prompt:
+        if anthropic_messages and anthropic_messages[0]["role"] == "user":
+            anthropic_messages[0]["content"] = f"{system_prompt}\n\n{anthropic_messages[0]['content']}"
+
+    response = await anthropic_client.messages.create(
+        model=model,
+        messages=anthropic_messages,
+        max_tokens=kwargs.pop("max_tokens", 8192),
+        **kwargs
+    )
+
+    if hashing_kv is not None:
+        await hashing_kv.upsert(
+            {args_hash: {"return": response.content[0].text, "model": model}}
+        )
+    return response.content[0].text
 
 class BedrockError(Exception):
     """Generic error for issues related to Amazon Bedrock"""
@@ -490,6 +545,16 @@ async def azure_openai_complete(
         **kwargs,
     )
 
+async def anthropic_complete(
+    prompt, system_prompt=None, history_messages=[], **kwargs
+) -> str:
+    return await anthropic_complete_if_cache(
+        "claude-3-5-sonnet-20241022",
+        prompt,
+        system_prompt=system_prompt,
+        history_messages=history_messages,
+        **kwargs,
+    )
 
 async def bedrock_complete(
     prompt, system_prompt=None, history_messages=[], **kwargs
@@ -548,7 +613,7 @@ async def openai_embedding(
         AsyncOpenAI() if base_url is None else AsyncOpenAI(base_url=base_url)
     )
     response = await openai_async_client.embeddings.create(
-        model=model, input=texts, encoding_format="float"
+        model=model, input=texts, encoding_format="float", timeout=5.0
     )
     return np.array([dp.embedding for dp in response.data])
 
