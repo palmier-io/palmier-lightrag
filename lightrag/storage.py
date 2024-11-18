@@ -3,6 +3,7 @@ import html
 import os
 from dataclasses import dataclass
 from typing import Any, Union, cast
+import networkx as nx
 import numpy as np
 from nano_vectordb import NanoVectorDB
 import time
@@ -316,8 +317,8 @@ class SupabaseKVStorage(BaseKVStorage):
         
         # Initialize Supabase client
         self.supabase: Client = create_client(
-            os.environ.get("SUPABASE_URL"),
-            os.environ.get("SUPABASE_KEY")
+            os.,
+            self.global_config["supabase_key"]
         )
         
         # Initialize table if it doesn't exist
