@@ -3,9 +3,10 @@ import html
 import os
 from dataclasses import dataclass
 from typing import Any, Union, cast
-import networkx as nx
 import numpy as np
 from nano_vectordb import NanoVectorDB
+import time
+from supabase import create_client, Client
 
 from .utils import (
     logger,
@@ -299,3 +300,136 @@ class NetworkXStorage(BaseGraphStorage):
 
         nodes_ids = [self._graph.nodes[node_id]["id"] for node_id in nodes]
         return embeddings, nodes_ids
+
+
+@dataclass
+class SupabaseKVStorage(BaseKVStorage):
+    cache_size: int = 1000
+    cache_ttl: int = 300
+    batch_size: int = 1000
+
+    def __post_init__(self):
+        self._table_name = f"kv_store_{self.namespace}"
+        self._cache = {}
+        self._cache_timestamps = {}
+        self._write_lock = asyncio.Lock()
+        
+        # Initialize Supabase client
+        self.supabase: Client = create_client(
+            os.environ.get("SUPABASE_URL"),
+            os.environ.get("SUPABASE_KEY")
+        )
+        
+        # Initialize table if it doesn't exist
+        self._init_table()
+
+    def _init_table(self):
+        """Initialize table with proper structure"""
+        # Using raw SQL through Supabase's REST API
+        sql = f"""
+        CREATE TABLE IF NOT EXISTS {self._table_name} (
+            id TEXT PRIMARY KEY,
+            data JSONB NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_{self._table_name}_data 
+        ON {self._table_name} USING GIN (data);
+        """
+        self.supabase.table(self._table_name).execute(sql)
+
+    def _update_cache(self, id: str, data: dict):
+        if len(self._cache) >= self.cache_size:
+            oldest_id = min(self._cache_timestamps, key=self._cache_timestamps.get)
+            del self._cache[oldest_id]
+            del self._cache_timestamps[oldest_id]
+        
+        self._cache[id] = data
+        self._cache_timestamps[id] = time.time()
+
+    async def all_keys(self) -> list[str]:
+        response = await self.supabase.table(self._table_name)\
+            .select('id')\
+            .execute()
+        return [row['id'] for row in response.data]
+
+    async def get_by_id(self, id: str) -> Union[dict, None]:
+        # Check cache first
+        if id in self._cache:
+            if time.time() - self._cache_timestamps[id] < self.cache_ttl:
+                return self._cache[id]
+            del self._cache[id]
+            del self._cache_timestamps[id]
+
+        response = await self.supabase.table(self._table_name)\
+            .select('data')\
+            .eq('id', id)\
+            .execute()
+        
+        if response.data:
+            data = response.data[0]['data']
+            self._update_cache(id, data)
+            return data
+        return None
+
+    async def get_by_ids(
+        self, 
+        ids: list[str], 
+        fields: Union[set[str], None] = None
+    ) -> list[Union[dict, None]]:
+        if fields:
+            # Select specific fields from JSONB
+            select_fields = ','.join(f"data->'{field}'" for field in fields)
+            response = await self.supabase.table(self._table_name)\
+                .select(f"id,{select_fields}")\
+                .in_('id', ids)\
+                .execute()
+        else:
+            response = await self.supabase.table(self._table_name)\
+                .select('id,data')\
+                .in_('id', ids)\
+                .execute()
+
+        result_map = {row['id']: row['data'] for row in response.data}
+        return [result_map.get(id_) for id_ in ids]
+
+    async def filter_keys(self, data: list[str]) -> set[str]:
+        response = await self.supabase.table(self._table_name)\
+            .select('id')\
+            .in_('id', data)\
+            .execute()
+        
+        existing_keys = {row['id'] for row in response.data}
+        return set(data) - existing_keys
+
+    async def upsert(self, data: dict[str, dict]) -> dict[str, dict]:
+        async with self._write_lock:
+            # Prepare data for upsert
+            records = [
+                {'id': k, 'data': v, 'updated_at': 'now()'}
+                for k, v in data.items()
+            ]
+            
+            # Supabase upsert operation
+            response = await self.supabase.table(self._table_name)\
+                .upsert(records)\
+                .execute()
+            
+            # Update cache
+            for k, v in data.items():
+                self._update_cache(k, v)
+            
+            return data
+
+    async def drop(self):
+        await self.supabase.table(self._table_name)\
+            .delete()\
+            .neq('id', 'dummy')\
+            .execute()
+
+    async def index_done_callback(self):
+        # No cleanup needed for Supabase
+        pass
+
+    async def query_done_callback(self):
+        pass
