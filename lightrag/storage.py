@@ -317,8 +317,8 @@ class SupabaseKVStorage(BaseKVStorage):
         
         # Initialize Supabase client
         self.supabase: Client = create_client(
-            os.,
-            self.global_config["supabase_key"]
+            os.getenv("SUPABASE_URL"),
+            os.getenv("SUPABASE_KEY")
         )
         
         # Initialize table if it doesn't exist
