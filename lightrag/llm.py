@@ -548,7 +548,7 @@ async def openai_embedding(
         AsyncOpenAI() if base_url is None else AsyncOpenAI(base_url=base_url)
     )
     response = await openai_async_client.embeddings.create(
-        model=model, input=texts, encoding_format="float"
+        model=model, input=texts, encoding_format="float", timeout=5.0
     )
     return np.array([dp.embedding for dp in response.data])
 
