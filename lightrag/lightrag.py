@@ -41,6 +41,13 @@ from .storage import (
     NetworkXStorage,
 )
 
+from chunking.language_parsers import (
+    get_language_from_file,
+    SUPPORT_LANGUAGES,
+)
+
+from chunking.code_chunker import CodeChunker
+
 from .kg.neo4j_impl import Neo4JStorage
 
 from .kg.oracle_impl import OracleKVStorage, OracleGraphStorage, OracleVectorDBStorage
@@ -223,6 +230,87 @@ class LightRAG:
             "OracleGraphStorage": OracleGraphStorage,
             # "ArangoDBStorage": ArangoDBStorage
         }
+    
+    def insert_files(self, directory: str):
+        """ Palmier Specific - inserting file(s) to the knowledge graph """
+        loop = always_get_an_event_loop()
+        return loop.run_until_complete(self.ainsert_files(directory))
+
+    async def ainsert_files(self, directory: str):
+        """ Palmier Specific - inserting file(s) to the knowledge graph """
+        update_storage = False
+        try:
+            code_chunker = CodeChunker(directory, target_tokens=self.chunk_token_size, overlap_token_size=self.chunk_overlap_token_size, tiktoken_model=self.tiktoken_model_name)
+            file_paths = code_chunker.traverse_directory()
+
+            # Create a new document for each file
+            new_docs = {}
+            for file_path in file_paths:
+                with open(file_path, "r") as f:
+                    content = f.read()
+
+                language = get_language_from_file(file_path)
+                new_docs[compute_mdhash_id(content.strip(), prefix="doc-")] = {
+                    "file_path": file_path,
+                    "language": language,
+                    "content": content.strip(),
+                }
+
+            # Filter out any unchanged documents
+            _add_doc_keys = await self.full_docs.filter_keys(list(new_docs.keys()))
+            new_docs = {k: v for k, v in new_docs.items() if k in _add_doc_keys}
+
+            if not len(new_docs):
+                logger.warning("All docs are already in the storage")
+                return
+            
+            update_storage = True
+            logger.info(f"[New Docs] inserting {len(new_docs)} docs")
+
+            # Chunking by Tree-sitter
+            inserting_chunks = {}
+            for doc_key, doc in new_docs.items():
+                chunks = {
+                    compute_mdhash_id(dp["content"], prefix="chunk-"): {
+                        **dp,
+                        "full_doc_id": doc_key,
+                    }
+                    for dp in code_chunker.chunk_file(doc["file_path"])
+                }
+                inserting_chunks.update(chunks)
+
+            # Filter out any unchanged chunks
+            _add_chunk_keys = await self.text_chunks.filter_keys(
+                list(inserting_chunks.keys())
+            )
+            inserting_chunks = {
+                k: v for k, v in inserting_chunks.items() if k in _add_chunk_keys
+            }
+            if not len(inserting_chunks):
+                logger.warning("All chunks are already in the storage")
+                return
+            logger.info(f"[New Chunks] inserting {len(inserting_chunks)} chunks")
+
+            await self.chunks_vdb.upsert(inserting_chunks)
+
+            logger.info("[Entity Extraction]...")
+            maybe_new_kg = await extract_entities(
+                inserting_chunks,
+                knowledge_graph_inst=self.chunk_entity_relation_graph,
+                entity_vdb=self.entities_vdb,
+                relationships_vdb=self.relationships_vdb,
+                global_config=asdict(self),
+            )
+            if maybe_new_kg is None:
+                logger.warning("No new entities and relationships found")
+                return
+            self.chunk_entity_relation_graph = maybe_new_kg
+
+            await self.full_docs.upsert(new_docs)
+            await self.text_chunks.upsert(inserting_chunks)
+        finally:
+            if update_storage:
+                await self._insert_done()
 
     def insert(self, string_or_strings):
         loop = always_get_an_event_loop()

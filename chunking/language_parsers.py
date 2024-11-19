@@ -8,7 +8,6 @@ SUPPORT_LANGUAGES = [
     "cpp",
     "c_sharp",
     "css",
-    "dockerfile",
     "dot",
     "elisp",
     "elixir",
@@ -29,6 +28,7 @@ SUPPORT_LANGUAGES = [
     "kotlin",
     "lua",
     "make",
+    "markdown",
     "objc",
     "ocaml",
     "perl",
@@ -45,6 +45,9 @@ SUPPORT_LANGUAGES = [
     "sqlite",
     "tsq",
     "typescript",
+    "tsx",
+    "yaml",
+    "xml"
 ]
 
 FILES_TO_IGNORE = [

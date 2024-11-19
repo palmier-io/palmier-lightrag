@@ -22,5 +22,5 @@ torch
 transformers
 tree-sitter==0.21.3
 tree_sitter_languages==1.10.2
-uvicorn
+pygments
 xxhash
