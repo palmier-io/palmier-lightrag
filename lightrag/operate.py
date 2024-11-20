@@ -29,7 +29,7 @@ from .prompt import GRAPH_FIELD_SEP, PROMPTS
 
 
 def chunking_by_token_size(
-    content: str, overlap_token_size=128, max_token_size=1024, tiktoken_model="gpt-4o"
+    content: str, overlap_token_size=128, max_token_size=800, tiktoken_model="gpt-4o"
 ):
     tokens = encode_string_by_tiktoken(content, model_name=tiktoken_model)
     results = []
@@ -400,7 +400,46 @@ async def delete_by_chunk_ids(
     await chunks_vdb.delete_by_ids(chunk_ids)
     await text_chunks_db.delete_by_ids(chunk_ids)
 
-    # TODO: Find all nodes and edges that are connected to the chunks
+    # Find all nodes and edges that are connected to the chunks
+    all_related_nodes = await knowledge_graph_inst.get_nodes_by_property("source_id", chunk_ids, split_by_sep=True)
+    all_related_edges = await knowledge_graph_inst.get_edges_by_property("source_id", chunk_ids, split_by_sep=True)
+
+    print(f"Found {len(all_related_nodes)} related nodes and {len(all_related_edges)} related edges")
+
+    # Update nodes
+    deleted_node_count = 0
+    for node in all_related_nodes:
+        source_ids = split_string_by_multi_markers(node.get("source_id", ""), [GRAPH_FIELD_SEP])
+        entity_name = node["entity_type"]
+        
+        # Filter out chunk_ids from source_ids
+        filtered_source_ids = [sid for sid in source_ids if sid not in chunk_ids]
+        
+        if filtered_source_ids:  # If there are remaining source_ids, update the node
+            node["source_id"] = GRAPH_FIELD_SEP.join(filtered_source_ids)
+            await knowledge_graph_inst.upsert_node(entity_name, node)
+        else:  # If no source_ids remain, delete the node
+            await knowledge_graph_inst.delete_node(entity_name)
+            await entities_vdb.delete_entity(entity_name)
+            await relationships_vdb.delete_relation(entity_name)
+            deleted_node_count += 1
+
+    # Update edges
+    deleted_edge_count = 0
+    for edge in all_related_edges:
+        source_ids = split_string_by_multi_markers(edge.get("source_id", ""), [GRAPH_FIELD_SEP])
+        
+        # Filter out chunk_ids from source_ids
+        filtered_source_ids = [sid for sid in source_ids if sid not in chunk_ids]
+        
+        if filtered_source_ids:  # If there are remaining source_ids, update the edge
+            edge["source_id"] = GRAPH_FIELD_SEP.join(filtered_source_ids)
+            await knowledge_graph_inst.upsert_edge(edge["source"], edge["target"], edge)
+        else:  # If no source_ids remain, delete the edge
+            await knowledge_graph_inst.delete_edge(edge["source"], edge["target"])
+            deleted_edge_count += 1
+
+    print(f"Deleted {deleted_node_count} nodes and {deleted_edge_count} edges")
 
 
 async def local_query(
@@ -909,8 +948,12 @@ async def _find_related_text_unit_from_relationships(
     if any([v is None for v in all_text_units_lookup.values()]):
         logger.warning("Text chunks are missing, maybe the storage is damaged")
     all_text_units = [
-        {"id": k, **v} for k, v in all_text_units_lookup.items() if v is not None
+        {"id": k, **v} for k, v in all_text_units_lookup.items()
+        if v is not None and v.get("data") is not None and "content" in v["data"]
     ]
+    if not all_text_units:
+        logger.warning("No valid text units found")
+        return []
     all_text_units = sorted(all_text_units, key=lambda x: x["order"])
     all_text_units = truncate_list_by_token_size(
         all_text_units,

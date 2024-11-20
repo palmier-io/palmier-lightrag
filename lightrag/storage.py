@@ -14,6 +14,7 @@ from .utils import (
     load_json,
     write_json,
     compute_mdhash_id,
+    split_string_by_multi_markers
 )
 
 from .base import (
@@ -21,6 +22,8 @@ from .base import (
     BaseKVStorage,
     BaseVectorStorage,
 )
+
+from .prompt import GRAPH_FIELD_SEP
 
 
 @dataclass
@@ -328,9 +331,16 @@ class NetworkXStorage(BaseGraphStorage):
         """
         if self._graph.has_node(node_id):
             self._graph.remove_node(node_id)
-            logger.info(f"Node {node_id} deleted from the graph.")
+            logger.debug(f"Node {node_id} deleted from the graph.")
         else:
             logger.warning(f"Node {node_id} not found in the graph for deletion.")
+
+    async def delete_edge(self, source_node_id: str, target_node_id: str):
+        if self._graph.has_edge(source_node_id, target_node_id):
+            self._graph.remove_edge(source_node_id, target_node_id)
+            logger.debug(f"Edge {source_node_id}->{target_node_id} deleted from the graph.")
+        else:
+            logger.warning(f"Edge {source_node_id}->{target_node_id} not found in the graph for deletion.")
 
     async def embed_nodes(self, algorithm: str) -> tuple[np.ndarray, list[str]]:
         if algorithm not in self._node_embed_algorithms:
@@ -348,6 +358,68 @@ class NetworkXStorage(BaseGraphStorage):
 
         nodes_ids = [self._graph.nodes[node_id]["id"] for node_id in nodes]
         return embeddings, nodes_ids
+
+    async def get_nodes_by_property(
+        self, 
+        property_name: str, 
+        property_value: Any,
+        split_by_sep: bool = False
+    ) -> list[dict]:
+        matching_nodes = []
+        # Convert property_value to list if it isn't already
+        search_values = property_value if isinstance(property_value, list) else [property_value]
+        
+        for node, data in self._graph.nodes(data=True):
+            prop_value = data.get(property_name)
+            if prop_value is None:
+                continue
+                
+            if split_by_sep:
+                # Split stored value by GRAPH_FIELD_SEP
+                stored_values = split_string_by_multi_markers(prop_value, [GRAPH_FIELD_SEP])
+                # Check if any search value matches any stored value
+                if any(search_val in stored_values for search_val in search_values):
+                    matching_nodes.append({**data, 'id': node})
+            else:
+                # For non-split values, check if property value matches any search value
+                if prop_value in search_values:
+                    matching_nodes.append({**data, 'id': node})
+        return matching_nodes
+
+    async def get_edges_by_property(
+        self, 
+        property_name: str, 
+        property_value: Any,
+        split_by_sep: bool = False
+    ) -> list[dict]:
+        matching_edges = []
+        # Convert property_value to list if it isn't already
+        search_values = property_value if isinstance(property_value, list) else [property_value]
+        
+        for source, target, data in self._graph.edges(data=True):
+            prop_value = data.get(property_name)
+            if prop_value is None:
+                continue
+                
+            if split_by_sep:
+                # Split stored value by GRAPH_FIELD_SEP
+                stored_values = split_string_by_multi_markers(prop_value, [GRAPH_FIELD_SEP])
+                # Check if any search value matches any stored value
+                if any(search_val in stored_values for search_val in search_values):
+                    matching_edges.append({
+                        **data,
+                        'source': source,
+                        'target': target
+                    })
+            else:
+                # For non-split values, check if property value matches any search value
+                if prop_value in search_values:
+                    matching_edges.append({
+                        **data,
+                        'source': source,
+                        'target': target
+                    })
+        return matching_edges
 
 
 @dataclass

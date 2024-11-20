@@ -5,6 +5,7 @@ from typing import Any, Union, Tuple, List, Dict
 import inspect
 from lightrag.utils import logger
 from ..base import BaseGraphStorage
+from ..prompt import GRAPH_FIELD_SEP
 from neo4j import (
     AsyncGraphDatabase,
     exceptions as neo4jExceptions,
@@ -294,3 +295,123 @@ class Neo4JStorage(BaseGraphStorage):
 
     async def _node2vec_embed(self):
         print("Implemented but never called.")
+
+    async def delete_node(self, node_id: str):
+        try:
+            async with self._driver.session() as session:
+                query = f"MATCH (n:`{node_id}`) DETACH DELETE n"
+                await session.run(query)
+                logger.debug(f"Node {node_id} deleted from the graph.")
+        except Exception as e:
+            logger.error(f"Error during node deletion: {str(e)}")
+            raise
+
+    async def delete_edge(self, source_node_id: str, target_node_id: str):
+        try:
+            async with self._driver.session() as session:
+                query = f"MATCH ()-[r]->() WHERE r.source = $source_node_id AND r.target = $target_node_id DELETE r"
+                await session.run(query, source_node_id=source_node_id, target_node_id=target_node_id)
+                logger.debug(f"Edge {source_node_id}->{target_node_id} deleted from the graph.")
+        except Exception as e:
+            logger.error(f"Error during edge deletion: {str(e)}")
+            raise
+
+    async def get_nodes_by_property(
+        self, 
+        property_name: str, 
+        property_value: Any,
+        split_by_sep: bool = False
+    ) -> List[Dict]:
+        """
+        Get all nodes that have a specific property value.
+        
+        Args:
+            property_name: The name of the property to match
+            property_value: The value to match against
+            split_by_sep: If True, treats property value as GRAPH_FIELD_SEP-separated 
+                         string and matches if value exists in any part
+        Returns:
+            List of node dictionaries matching the criteria
+        """
+        async with self._driver.session() as session:
+            if split_by_sep:
+                # Use SPLIT and ANY for GRAPH_FIELD_SEP separated values
+                query = """
+                MATCH (n)
+                WHERE n[$property_name] IS NOT NULL AND 
+                      ANY(x IN SPLIT(n[$property_name], $sep) WHERE x = $property_value)
+                RETURN n
+                """
+                result = await session.run(query, 
+                                         property_name=property_name,
+                                         property_value=property_value,
+                                         sep=GRAPH_FIELD_SEP)
+            else:
+                # Use exact matching
+                query = """
+                MATCH (n)
+                WHERE n[$property_name] = $property_value
+                RETURN n
+                """
+                result = await session.run(query, 
+                                         property_name=property_name,
+                                         property_value=property_value)
+            
+            nodes = []
+            async for record in result:
+                node = dict(record["n"])
+                nodes.append(node)
+            logger.debug(
+                f"{inspect.currentframe().f_code.co_name}:query:{query}:result:{nodes}"
+            )
+            return nodes
+
+    async def get_edges_by_property(
+        self, 
+        property_name: str, 
+        property_value: Any,
+        split_by_sep: bool = False
+    ) -> List[Dict]:
+        """
+        Get all edges that have a specific property value.
+        
+        Args:
+            property_name: The name of the property to match
+            property_value: The value to match against
+            split_by_sep: If True, treats property value as GRAPH_FIELD_SEP-separated 
+                         string and matches if value exists in any part
+        Returns:
+            List of edge dictionaries matching the criteria
+        """
+        async with self._driver.session() as session:
+            if split_by_sep:
+                # Use SPLIT and ANY for GRAPH_FIELD_SEP separated values
+                query = """
+                MATCH ()-[r]->()
+                WHERE r[$property_name] IS NOT NULL AND 
+                      ANY(x IN SPLIT(r[$property_name], $sep) WHERE x = $property_value)
+                RETURN r
+                """
+                result = await session.run(query,
+                                         property_name=property_name,
+                                         property_value=property_value,
+                                         sep=GRAPH_FIELD_SEP)
+            else:
+                # Use exact matching
+                query = """
+                MATCH ()-[r]->()
+                WHERE r[$property_name] = $property_value
+                RETURN r
+                """
+                result = await session.run(query,
+                                         property_name=property_name,
+                                         property_value=property_value)
+            
+            edges = []
+            async for record in result:
+                edge = dict(record["r"])
+                edges.append(edge)
+            logger.debug(
+                f"{inspect.currentframe().f_code.co_name}:query:{query}:result:{edges}"
+            )
+            return edges

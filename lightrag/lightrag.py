@@ -42,10 +42,7 @@ from .storage import (
     NetworkXStorage,
 )
 
-from chunking.language_parsers import (
-    get_language_from_file,
-    SUPPORT_LANGUAGES,
-)
+from chunking.language_parsers import get_language_from_file
 
 from chunking.code_chunker import CodeChunker
 
@@ -276,6 +273,9 @@ class LightRAG:
             
             update_storage = True
             logger.info(f"[New Docs] inserting {len(new_docs)} docs")
+            await self.full_docs.upsert(new_docs)
+            logger.info(f"[Remove Docs] removing {len(doc_id_mapping)} docs")
+            await self.full_docs.delete_by_ids(list(doc_id_mapping.keys()))
 
             # Chunking by either tree-sitter or token size
             inserting_chunks = {}
@@ -307,7 +307,8 @@ class LightRAG:
             }
         
             if not len(adding_chunks):
-                logger.warning("All chunks are already in the storage, none is being added")
+                logger.warning("All chunks are already in the storage")
+                return
             else:
                 logger.info(f"[New Chunks] inserting {len(adding_chunks)} chunks")
                 await self.chunks_vdb.upsert(adding_chunks)
@@ -339,12 +340,6 @@ class LightRAG:
                 self.chunks_vdb,
                 self.text_chunks,
             )
-
-            logger.info(f"[Insert Docs] inserting {len(new_docs)} docs")
-            await self.full_docs.upsert(new_docs)
-
-            logger.info(f"[Remove Docs] removing {len(doc_id_mapping)} docs")
-            await self.full_docs.delete_by_ids(list(doc_id_mapping.keys()))
 
         finally:
             if update_storage:
