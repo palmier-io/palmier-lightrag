@@ -55,6 +55,9 @@ class BaseVectorStorage(StorageNameSpace):
         If embedding_func is None, use 'embedding' field from value
         """
         raise NotImplementedError
+    
+    async def delete_by_ids(self, ids: list[str]):
+        raise NotImplementedError
 
 
 @dataclass
@@ -72,6 +75,11 @@ class BaseKVStorage(Generic[T], StorageNameSpace):
     ) -> list[Union[T, None]]:
         raise NotImplementedError
 
+    async def get_by_field(
+        self, field: str, values: list[str]
+    ) -> list[Union[T, None]]:
+        raise NotImplementedError
+
     async def filter_keys(self, data: list[str]) -> set[str]:
         """return un-exist keys"""
         raise NotImplementedError
@@ -80,6 +88,9 @@ class BaseKVStorage(Generic[T], StorageNameSpace):
         raise NotImplementedError
 
     async def drop(self):
+        raise NotImplementedError
+    
+    async def delete_by_ids(self, ids: list[str]):
         raise NotImplementedError
 
 

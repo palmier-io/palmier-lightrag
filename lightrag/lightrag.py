@@ -12,6 +12,7 @@ from .llm import (
 from .operate import (
     chunking_by_token_size,
     extract_entities,
+    delete_by_chunk_ids,
     local_query,
     global_query,
     hybrid_query,
@@ -260,6 +261,15 @@ class LightRAG:
             _add_doc_keys = await self.full_docs.filter_keys(list(new_docs.keys()))
             new_docs = {k: v for k, v in new_docs.items() if k in _add_doc_keys}
 
+            new_docs_file_paths = {v["file_path"]: k for k, v in new_docs.items()}
+            outdated_docs = await self.full_docs.get_by_field("file_path", list(new_docs_file_paths))
+            
+            # Create mapping of old_doc_id -> new_doc_id based on matching file paths
+            doc_id_mapping = {
+                old_doc_id: new_docs_file_paths[doc["file_path"]]
+                for old_doc_id, doc in outdated_docs.items()
+            }
+
             if not len(new_docs):
                 logger.warning("All docs are already in the storage")
                 return
@@ -267,7 +277,7 @@ class LightRAG:
             update_storage = True
             logger.info(f"[New Docs] inserting {len(new_docs)} docs")
 
-            # Chunking by Tree-sitter
+            # Chunking by either tree-sitter or token size
             inserting_chunks = {}
             for doc_key, doc in new_docs.items():
                 chunks = {
@@ -279,23 +289,33 @@ class LightRAG:
                 }
                 inserting_chunks.update(chunks)
 
-            # Filter out any unchanged chunks
-            _add_chunk_keys = await self.text_chunks.filter_keys(
-                list(inserting_chunks.keys())
-            )
-            inserting_chunks = {
+            # Get all chunks belonging to outdated documents
+            outdated_chunks = await self.text_chunks.get_by_field("full_doc_id", list(doc_id_mapping.keys()))
+            
+            # Chunk keys to add, update, and remove
+            _add_chunk_keys = await self.text_chunks.filter_keys(list(inserting_chunks.keys()))
+            _update_chunk_keys = set(inserting_chunks.keys()) - set(_add_chunk_keys)
+            _remove_chunk_keys = set(outdated_chunks.keys()) - set(_update_chunk_keys)
+
+            # Filter inserting_chunks to only include new chunks
+            adding_chunks = {
                 k: v for k, v in inserting_chunks.items() if k in _add_chunk_keys
             }
-            if not len(inserting_chunks):
-                logger.warning("All chunks are already in the storage")
-                return
-            logger.info(f"[New Chunks] inserting {len(inserting_chunks)} chunks")
 
-            await self.chunks_vdb.upsert(inserting_chunks)
+            updating_chunks = {
+                k: v for k, v in inserting_chunks.items() if k in _update_chunk_keys
+            }
+        
+            if not len(adding_chunks):
+                logger.warning("All chunks are already in the storage, none is being added")
+            else:
+                logger.info(f"[New Chunks] inserting {len(adding_chunks)} chunks")
+                await self.chunks_vdb.upsert(adding_chunks)
+                await self.text_chunks.upsert(adding_chunks)
 
             logger.info("[Entity Extraction]...")
             maybe_new_kg = await extract_entities(
-                inserting_chunks,
+                adding_chunks,
                 knowledge_graph_inst=self.chunk_entity_relation_graph,
                 entity_vdb=self.entities_vdb,
                 relationships_vdb=self.relationships_vdb,
@@ -306,8 +326,26 @@ class LightRAG:
                 return
             self.chunk_entity_relation_graph = maybe_new_kg
 
+            logger.info(f"[Update Chunks] updating {len(updating_chunks)} chunk metadata")
+            await self.chunks_vdb.upsert(updating_chunks)
+            await self.text_chunks.upsert(updating_chunks)
+
+            logger.info(f"[Remove Chunks] removing {len(_remove_chunk_keys)} outdated chunks")
+            await delete_by_chunk_ids(
+                list(_remove_chunk_keys),
+                self.chunk_entity_relation_graph,
+                self.entities_vdb,
+                self.relationships_vdb,
+                self.chunks_vdb,
+                self.text_chunks,
+            )
+
+            logger.info(f"[Insert Docs] inserting {len(new_docs)} docs")
             await self.full_docs.upsert(new_docs)
-            await self.text_chunks.upsert(inserting_chunks)
+
+            logger.info(f"[Remove Docs] removing {len(doc_id_mapping)} docs")
+            await self.full_docs.delete_by_ids(list(doc_id_mapping.keys()))
+
         finally:
             if update_storage:
                 await self._insert_done()

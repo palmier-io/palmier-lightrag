@@ -188,9 +188,6 @@ class CodeChunker:
                 if language_name != "text only" and language_name not in SUPPORT_LANGUAGES:
                     continue
 
-                if "local_neo4jWorkDir" in os.path.join(root, file):
-                    continue
-
                 file_list.append(os.path.join(root, file))
         return file_list
     

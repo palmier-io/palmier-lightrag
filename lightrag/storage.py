@@ -51,17 +51,32 @@ class JsonKVStorage(BaseKVStorage):
             )
             for id in ids
         ]
+    
+    async def get_by_field(self, field: str, values: list) -> dict[str, dict]:
+        values_set = set(values)  # Convert to set for O(1) lookup
+        return {
+            doc_id: doc 
+            for doc_id, doc in self._data.items()
+            if doc.get(field) in values_set
+        }
 
     async def filter_keys(self, data: list[str]) -> set[str]:
         return set([s for s in data if s not in self._data])
 
     async def upsert(self, data: dict[str, dict]):
-        left_data = {k: v for k, v in data.items() if k not in self._data}
-        self._data.update(left_data)
-        return left_data
+        for key, new_value in data.items():
+            if key in self._data:
+                self._data[key].update(new_value)
+            else:
+                self._data[key] = new_value
+        return data
 
     async def drop(self):
         self._data = {}
+
+    async def delete_by_ids(self, ids: list[str]):
+        for id in ids:
+            del self._data[id]
 
 
 @dataclass
@@ -85,25 +100,54 @@ class NanoVectorDBStorage(BaseVectorStorage):
         if not len(data):
             logger.warning("You insert an empty data to vector DB")
             return []
-        list_data = [
-            {
-                "__id__": k,
-                **{k1: v1 for k1, v1 in v.items() if k1 in self.meta_fields},
-            }
-            for k, v in data.items()
-        ]
-        contents = [v["content"] for v in data.values()]
-        batches = [
-            contents[i : i + self._max_batch_size]
-            for i in range(0, len(contents), self._max_batch_size)
-        ]
-        embeddings_list = await asyncio.gather(
-            *[self.embedding_func(batch) for batch in batches]
-        )
-        embeddings = np.concatenate(embeddings_list)
-        for i, d in enumerate(list_data):
-            d["__vector__"] = embeddings[i]
-        results = self._client.upsert(datas=list_data)
+        
+        # Separate data into content changes and metadata-only changes
+        content_changes = {}
+        metadata_changes = {}
+        
+        for k, v in data.items():
+            existing = self._client.get([k])
+            if not existing or existing[0].get('content') != v.get('content'):
+                content_changes[k] = v
+            else:
+                metadata_changes[k] = v
+        
+        results = []
+        
+        # Handle metadata-only updates
+        if metadata_changes:
+            metadata_list = [
+                {
+                    "__id__": k,
+                    **{k1: v1 for k1, v1 in v.items() if k1 in self.meta_fields},
+                    "__vector__": self._client.get([k])[0]["__vector__"]  # Reuse existing embedding
+                }
+                for k, v in metadata_changes.items()
+            ]
+            results.extend(self._client.upsert(datas=metadata_list))
+        
+        # Handle content changes that need new embeddings
+        if content_changes:
+            list_data = [
+                {
+                    "__id__": k,
+                    **{k1: v1 for k1, v1 in v.items() if k1 in self.meta_fields},
+                }
+                for k, v in content_changes.items()
+            ]
+            contents = [v["content"] for v in content_changes.values()]
+            batches = [
+                contents[i : i + self._max_batch_size]
+                for i in range(0, len(contents), self._max_batch_size)
+            ]
+            embeddings_list = await asyncio.gather(
+                *[self.embedding_func(batch) for batch in batches]
+            )
+            embeddings = np.concatenate(embeddings_list)
+            for i, d in enumerate(list_data):
+                d["__vector__"] = embeddings[i]
+            results.extend(self._client.upsert(datas=list_data))
+        
         return results
 
     async def query(self, query: str, top_k=5):
@@ -118,6 +162,9 @@ class NanoVectorDBStorage(BaseVectorStorage):
             {**dp, "id": dp["__id__"], "distance": dp["__metrics__"]} for dp in results
         ]
         return results
+    
+    async def delete_by_ids(self, ids: list[str]):
+        self._client.delete(ids)
 
     @property
     def client_storage(self):
@@ -434,3 +481,29 @@ class SupabaseKVStorage(BaseKVStorage):
 
     async def query_done_callback(self):
         pass
+
+    async def get_by_field(self, field: str, values: list) -> dict[str, dict]:
+        """Get all documents where the specified field matches any of the given values.
+        
+        Args:
+            field: The field to match against
+            values: List of values to match
+            
+        Returns:
+            Dictionary of document_id -> document for all matching documents
+        """
+        # Query using Supabase's containedBy operator for JSONB fields
+        response = await self.supabase.table(self._table_name)\
+            .select('id,data')\
+            .contains(f'data->{field}', values)\
+            .execute()
+        
+        # Convert response to dictionary and update cache
+        result = {}
+        for row in response.data:
+            doc_id = row['id']
+            doc_data = row['data']
+            result[doc_id] = doc_data
+            self._update_cache(doc_id, doc_data)
+            
+        return result

@@ -388,6 +388,20 @@ async def extract_entities(
 
     return knowledge_graph_inst
 
+async def delete_by_chunk_ids(
+    chunk_ids: list[str],
+    knowledge_graph_inst: BaseGraphStorage,
+    entities_vdb: BaseVectorStorage,
+    relationships_vdb: BaseVectorStorage,
+    chunks_vdb: BaseVectorStorage,
+    text_chunks_db: BaseKVStorage[TextChunkSchema],
+):
+    # Remove chunks from vector db and text chunks
+    await chunks_vdb.delete_by_ids(chunk_ids)
+    await text_chunks_db.delete_by_ids(chunk_ids)
+
+    # TODO: Find all nodes and edges that are connected to the chunks
+
 
 async def local_query(
     query,
