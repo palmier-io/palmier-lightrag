@@ -130,7 +130,7 @@ class CodeChunk:
         }
 
 class CodeChunker:
-    def __init__(self, root_dir, target_tokens=1024, overlap_token_size=128, tiktoken_model="gpt-4o"):
+    def __init__(self, root_dir, target_tokens=800, overlap_token_size=128, tiktoken_model="gpt-4o"):
         # Local root directory of where the repo is downloaded to
         self.root_dir = root_dir
 

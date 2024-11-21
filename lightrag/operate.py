@@ -404,8 +404,6 @@ async def delete_by_chunk_ids(
     all_related_nodes = await knowledge_graph_inst.get_nodes_by_property("source_id", chunk_ids, split_by_sep=True)
     all_related_edges = await knowledge_graph_inst.get_edges_by_property("source_id", chunk_ids, split_by_sep=True)
 
-    print(f"Found {len(all_related_nodes)} related nodes and {len(all_related_edges)} related edges")
-
     # Update nodes
     deleted_node_count = 0
     for node in all_related_nodes:
@@ -439,7 +437,7 @@ async def delete_by_chunk_ids(
             await knowledge_graph_inst.delete_edge(edge["source"], edge["target"])
             deleted_edge_count += 1
 
-    print(f"Deleted {deleted_node_count} nodes and {deleted_edge_count} edges")
+    logger.info(f"Deleted {deleted_node_count} nodes and {deleted_edge_count} edges")
 
 
 async def local_query(
