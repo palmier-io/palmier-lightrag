@@ -42,9 +42,9 @@ from .storage import (
     NetworkXStorage,
 )
 
-from chunking.language_parsers import get_language_from_file
+from .chunking.language_parsers import get_language_from_file
 
-from chunking.code_chunker import CodeChunker
+from .chunking.code_chunker import CodeChunker
 
 from .kg.neo4j_impl import Neo4JStorage
 
