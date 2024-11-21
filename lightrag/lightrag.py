@@ -37,7 +37,7 @@ from .base import (
 
 from .storage import (
     JsonKVStorage,
-    SupabaseKVStorage,
+    # SupabaseKVStorage,
     NanoVectorDBStorage,
     NetworkXStorage,
 )
@@ -218,7 +218,7 @@ class LightRAG:
             # kv storage
             "JsonKVStorage": JsonKVStorage,
             "OracleKVStorage": OracleKVStorage,
-            "SupabaseKVStorage": SupabaseKVStorage,
+            # "SupabaseKVStorage": SupabaseKVStorage,
             # vector storage
             "NanoVectorDBStorage": NanoVectorDBStorage,
             "OracleVectorDBStorage": OracleVectorDBStorage,
