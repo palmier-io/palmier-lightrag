@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass
-from chunking.language_parsers import (
+from .language_parsers import (
     get_language_from_file,
     SUPPORT_LANGUAGES,
     FILES_TO_IGNORE,
