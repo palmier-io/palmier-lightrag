@@ -197,27 +197,6 @@ class CodeChunker:
 
         return [chunk.to_dict() for chunk in chunks]
 
-    def traverse_directory(self) -> List[str]:
-        """
-        Walk the directory and return a list of full file paths. Ignore files that are not supported.
-        """
-
-        file_list = []
-        for root, dirs, files in os.walk(self.root_dir):
-            for file in files:
-                if any(file.endswith(ext) for ext in FILES_TO_IGNORE):
-                    continue
-
-                language_name = get_language_from_file(os.path.join(root, file))
-                if (
-                    language_name != "text only"
-                    and language_name not in SUPPORT_LANGUAGES
-                ):
-                    continue
-
-                file_list.append(os.path.join(root, file))
-        return file_list
-
     def _chunking_by_token_size(
         self, content: str, file_path: str, current_index: int = 0
     ) -> List[CodeChunk]:
@@ -400,6 +379,26 @@ class CodeChunker:
         """Determine if we should start a new chunk"""
         return current_tokens + new_tokens > self.target_tokens
 
+def traverse_directory(root_dir: str) -> List[str]:
+    """
+    Walk the directory and return a list of full file paths. Ignore files that are not supported.
+    """
+
+    file_list = []
+    for root, dirs, files in os.walk(root_dir):
+        for file in files:
+            if any(file.endswith(ext) for ext in FILES_TO_IGNORE):
+                continue
+
+            language_name = get_language_from_file(os.path.join(root, file))
+            if (
+                language_name != "text only"
+                and language_name not in SUPPORT_LANGUAGES
+            ):
+                continue
+
+            file_list.append(os.path.join(root, file))
+    return file_list
 
 # NOT USED
 def generate_file_summary(

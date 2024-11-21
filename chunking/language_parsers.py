@@ -8,6 +8,7 @@ SUPPORT_LANGUAGES = [
     "cpp",
     "c_sharp",
     "css",
+    "dockerfile",
     "dot",
     "elisp",
     "elixir",
