@@ -379,6 +379,7 @@ class CodeChunker:
         """Determine if we should start a new chunk"""
         return current_tokens + new_tokens > self.target_tokens
 
+
 def traverse_directory(root_dir: str) -> List[str]:
     """
     Walk the directory and return a list of full file paths. Ignore files that are not supported.
@@ -391,14 +392,12 @@ def traverse_directory(root_dir: str) -> List[str]:
                 continue
 
             language_name = get_language_from_file(os.path.join(root, file))
-            if (
-                language_name != "text only"
-                and language_name not in SUPPORT_LANGUAGES
-            ):
+            if language_name != "text only" and language_name not in SUPPORT_LANGUAGES:
                 continue
 
             file_list.append(os.path.join(root, file))
     return file_list
+
 
 # NOT USED
 def generate_file_summary(
