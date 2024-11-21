@@ -12,14 +12,17 @@ from chunking.language_parsers import (
     FILES_TO_IGNORE,
 )
 
+
 class ChunkType(Enum):
     TREE_SITTER = "tree_sitter"
     TOKEN_SIZE = "token_size"
     MERGE = "merge"
 
+
 @dataclass
 class Position:
-    """ A start/end position of a chunk """
+    """A start/end position of a chunk"""
+
     # The byte offset of the position - Present for token-size
     byte: Optional[int] = None
 
@@ -29,12 +32,15 @@ class Position:
     # The character number within the line - Present for tree-sitter
     character: Optional[int] = None
 
+
 @dataclass
 class NodeInfo:
     """Information about a tree-sitter node"""
+
     text: str
     token_count: int
     node: Node
+
 
 @dataclass
 class CodeChunk:
@@ -69,7 +75,9 @@ class CodeChunk:
         self._encoding = None
 
     @classmethod
-    def create(cls, file_path: str, language_name: str, code_str: str, encoding) -> 'CodeChunk':
+    def create(
+        cls, file_path: str, language_name: str, code_str: str, encoding
+    ) -> "CodeChunk":
         """Create a new empty chunk"""
         chunk = cls(
             index=0,  # Will be set later
@@ -79,7 +87,7 @@ class CodeChunk:
             start=None,
             end=None,
             chunk_type=ChunkType.TREE_SITTER,
-            tag={"language": language_name}
+            tag={"language": language_name},
         )
         chunk._encoding = encoding
         return chunk
@@ -101,7 +109,9 @@ class CodeChunk:
             character=node_info.node.end_point[1],
             byte=node_info.node.end_byte,
         )
-        self.content = '\n'.join(code_str.split('\n')[self.start.line : self.end.line+1])
+        self.content = "\n".join(
+            code_str.split("\n")[self.start.line : self.end.line + 1]
+        )
         self.token_count = len(self._encoding.encode(self.content))
 
     def set_index(self, index: int) -> None:
@@ -118,19 +128,30 @@ class CodeChunk:
             "start": {
                 "line": self.start.line,
                 "character": self.start.character,
-                "byte": self.start.byte
-            } if self.start else None,
+                "byte": self.start.byte,
+            }
+            if self.start
+            else None,
             "end": {
                 "line": self.end.line,
                 "character": self.end.character,
-                "byte": self.end.byte
-            } if self.end else None,
+                "byte": self.end.byte,
+            }
+            if self.end
+            else None,
             "chunk_type": self.chunk_type.value,
-            "tag": self.tag
+            "tag": self.tag,
         }
 
+
 class CodeChunker:
-    def __init__(self, root_dir, target_tokens=800, overlap_token_size=128, tiktoken_model="gpt-4o"):
+    def __init__(
+        self,
+        root_dir,
+        target_tokens=800,
+        overlap_token_size=128,
+        tiktoken_model="gpt-4o",
+    ):
         # Local root directory of where the repo is downloaded to
         self.root_dir = root_dir
 
@@ -144,7 +165,7 @@ class CodeChunker:
         self.encoding = tiktoken.encoding_for_model(tiktoken_model)
 
     def chunk_file(self, full_file_path: str) -> List[Dict[str, Any]]:
-        """ Given a full file path, return a list of chunks as dictionaries. """
+        """Given a full file path, return a list of chunks as dictionaries."""
 
         relative_file_path = full_file_path.replace(self.root_dir, "")
         # Remove leading separator and split path
@@ -165,9 +186,13 @@ class CodeChunker:
             content = content_bytes.decode("utf-8", errors="ignore")
             chunks = self._chunking_by_token_size(content, relative_file_path)
         elif language_name in SUPPORT_LANGUAGES:
-            chunks = self._chunking_by_tree_sitter(content_bytes, language_name, relative_file_path)
+            chunks = self._chunking_by_tree_sitter(
+                content_bytes, language_name, relative_file_path
+            )
         else:
-            logging.debug(f"Skipping file {full_file_path} - Unsupported language: {language_name}")
+            logging.debug(
+                f"Skipping file {full_file_path} - Unsupported language: {language_name}"
+            )
             return []
 
         return [chunk.to_dict() for chunk in chunks]
@@ -180,23 +205,27 @@ class CodeChunker:
         file_list = []
         for root, dirs, files in os.walk(self.root_dir):
             for file in files:
-
                 if any(file.endswith(ext) for ext in FILES_TO_IGNORE):
                     continue
 
                 language_name = get_language_from_file(os.path.join(root, file))
-                if language_name != "text only" and language_name not in SUPPORT_LANGUAGES:
+                if (
+                    language_name != "text only"
+                    and language_name not in SUPPORT_LANGUAGES
+                ):
                     continue
 
                 file_list.append(os.path.join(root, file))
         return file_list
-    
-    def _chunking_by_token_size(self, content: str, file_path: str, current_index: int = 0) -> List[CodeChunk]:
-        """ Chunk the content of a file by token size """
+
+    def _chunking_by_token_size(
+        self, content: str, file_path: str, current_index: int = 0
+    ) -> List[CodeChunk]:
+        """Chunk the content of a file by token size"""
 
         tokens = self.encoding.encode(content)
         results = []
-        
+
         for index, start in enumerate(
             range(0, len(tokens), self.target_tokens - self.overlap_token_size)
         ):
@@ -211,14 +240,15 @@ class CodeChunker:
                     token_count=min(self.target_tokens, len(tokens) - start),
                     start=Position(byte=start),
                     end=Position(byte=end),
-                    chunk_type=ChunkType.TOKEN_SIZE
+                    chunk_type=ChunkType.TOKEN_SIZE,
                 )
             )
         return results
 
-
-    def _chunking_by_tree_sitter(self, content_bytes: bytes, language_name: str, file_path: str) -> List[CodeChunk]:
-        """ Chunk the content of a file using tree-sitter """
+    def _chunking_by_tree_sitter(
+        self, content_bytes: bytes, language_name: str, file_path: str
+    ) -> List[CodeChunk]:
+        """Chunk the content of a file using tree-sitter"""
 
         try:
             parser = get_parser(language_name)
@@ -232,7 +262,7 @@ class CodeChunker:
         current_index = 0
 
         def traverse(node: Node) -> List[CodeChunk]:
-            """ Recursively traverse the tree-sitter tree """
+            """Recursively traverse the tree-sitter tree"""
             nonlocal code_str, language_name, file_path, current_index
 
             if len(node.children) == 0:
@@ -240,13 +270,19 @@ class CodeChunker:
                 return self._chunking_by_token_size(text, file_path, current_index)
 
             new_chunks: List[CodeChunk] = []
-            current_chunk = CodeChunk.create(file_path, language_name, code_str, self.encoding)
+            current_chunk = CodeChunk.create(
+                file_path, language_name, code_str, self.encoding
+            )
 
             for child in node.children:
                 child_info = NodeInfo(
                     text=code_str[child.start_byte : child.end_byte],
-                    token_count=len(self.encoding.encode(code_str[child.start_byte : child.end_byte])),
-                    node=child
+                    token_count=len(
+                        self.encoding.encode(
+                            code_str[child.start_byte : child.end_byte]
+                        )
+                    ),
+                    node=child,
                 )
 
                 # The child node itself is too big, so we need to recursively traverse the child nodes
@@ -255,18 +291,24 @@ class CodeChunker:
                         current_chunk.set_index(current_index)
                         new_chunks.append(current_chunk)
                         current_index += 1
-                    
+
                     new_chunks.extend(traverse(child))
-                    current_chunk = CodeChunk.create(file_path, language_name, code_str, self.encoding)
+                    current_chunk = CodeChunk.create(
+                        file_path, language_name, code_str, self.encoding
+                    )
 
                 # The child node does not fit in the current chunk, so we need to start a new chunk
-                elif self._should_start_new_chunk(current_chunk.token_count, child_info.token_count):
+                elif self._should_start_new_chunk(
+                    current_chunk.token_count, child_info.token_count
+                ):
                     if current_chunk.has_content():
                         current_chunk.set_index(current_index)
                         new_chunks.append(current_chunk)
                         current_index += 1
-                    
-                    current_chunk = CodeChunk.create(file_path, language_name, code_str, self.encoding)
+
+                    current_chunk = CodeChunk.create(
+                        file_path, language_name, code_str, self.encoding
+                    )
                     current_chunk.add_node(child_info, code_str)
 
                 else:
@@ -302,25 +344,37 @@ class CodeChunker:
 
         for last_chunk in chunks[1:]:
             # Can only merge Tree-Sitter chunks
-            if current_chunk.chunk_type == ChunkType.TOKEN_SIZE or last_chunk.chunk_type == ChunkType.TOKEN_SIZE:
+            if (
+                current_chunk.chunk_type == ChunkType.TOKEN_SIZE
+                or last_chunk.chunk_type == ChunkType.TOKEN_SIZE
+            ):
                 merged.append(current_chunk)
                 current_chunk = last_chunk
                 continue
 
             # If merging wouldn't exceed target_tokens, combine the chunks
-            if current_chunk.token_count + last_chunk.token_count <= self.target_tokens + self.overlap_token_size:
+            if (
+                current_chunk.token_count + last_chunk.token_count
+                <= self.target_tokens + self.overlap_token_size
+            ):
                 # Read directly from code_str to get the merged content
-                content = '\n'.join(code_str.split('\n')[last_chunk.start.line : current_chunk.end.line+1])
-                
+                content = "\n".join(
+                    code_str.split("\n")[
+                        last_chunk.start.line : current_chunk.end.line + 1
+                    ]
+                )
+
                 current_chunk = CodeChunk(
                     index=last_chunk.index,  # Use the earlier index
                     file_path=last_chunk.file_path,
                     start=last_chunk.start,
                     end=current_chunk.end,
                     content=content,
-                    token_count=len(self.encoding.encode(content)),  # Recalculate tokens
+                    token_count=len(
+                        self.encoding.encode(content)
+                    ),  # Recalculate tokens
                     tag=last_chunk.tag,
-                    chunk_type=ChunkType.MERGE
+                    chunk_type=ChunkType.MERGE,
                 )
                 current_chunk._encoding = self.encoding
             else:
@@ -346,8 +400,11 @@ class CodeChunker:
         """Determine if we should start a new chunk"""
         return current_tokens + new_tokens > self.target_tokens
 
+
 # NOT USED
-def generate_file_summary(code_str: str, file_path: str, model: str = "gpt-4o-mini") -> str:
+def generate_file_summary(
+    code_str: str, file_path: str, model: str = "gpt-4o-mini"
+) -> str:
     import openai
 
     client = openai.OpenAI()
@@ -362,33 +419,3 @@ def generate_file_summary(code_str: str, file_path: str, model: str = "gpt-4o-mi
         ],
     )
     return response.choices[0].message.content
-
-# if __name__ == "__main__":
-#     code_chunker = CodeChunker(root_dir="/Users/harrison/palmier-io/palmier-lightrag", target_tokens=800, overlap_token_size=128, tiktoken_model="gpt-4o")
-#     file_paths = code_chunker.traverse_directory()
-#     chunks = code_chunker.chunk_file("/Users/harrison/palmier-io/palmier-lightrag/lightrag/kg/oracle_impl.py")
-
-#     output_path = "/Users/harrison/palmier-io/palmier-lightrag/test_chunked_files"
-#     for chunk in chunks:
-#         # Create a sanitized file name
-#         sanitized_file_path = (
-#             chunk.file_path.replace(code_chunker.root_dir, "")
-#             .strip(os.sep)
-#             .replace(os.sep, "_")
-#         )
-#         output_file_name = f"{sanitized_file_path}_{chunk.index}.txt"
-#         output_file_path = os.path.join(output_path, output_file_name)
-#         os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
-
-#         # Write the chunk to a file
-#         with open(output_file_path, "w", encoding="utf-8") as f:
-#             f.write(f"File: {chunk.file_path}\n")
-#             f.write(f"Chunk: {chunk.index + 1}\n")
-#             f.write(f"Start: {chunk.start.line}:{chunk.start.character}\n")
-#             f.write(f"End: {chunk.end.line}:{chunk.end.character}\n")
-#             if chunk.tag and "language" in chunk.tag:
-#                 f.write(f"Language: {chunk.tag['language']}\n")
-#             f.write(f"Tokens: {chunk.token_count}\n")
-#             f.write(f"Chunk Type: {chunk.chunk_type}\n")
-#             f.write("\n")
-#             f.write(chunk.content)

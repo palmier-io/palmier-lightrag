@@ -388,6 +388,7 @@ async def extract_entities(
 
     return knowledge_graph_inst
 
+
 async def delete_by_chunk_ids(
     chunk_ids: list[str],
     knowledge_graph_inst: BaseGraphStorage,
@@ -401,18 +402,24 @@ async def delete_by_chunk_ids(
     await text_chunks_db.delete_by_ids(chunk_ids)
 
     # Find all nodes and edges that are connected to the chunks
-    all_related_nodes = await knowledge_graph_inst.get_nodes_by_property("source_id", chunk_ids, split_by_sep=True)
-    all_related_edges = await knowledge_graph_inst.get_edges_by_property("source_id", chunk_ids, split_by_sep=True)
+    all_related_nodes = await knowledge_graph_inst.get_nodes_by_property(
+        "source_id", chunk_ids, split_by_sep=True
+    )
+    all_related_edges = await knowledge_graph_inst.get_edges_by_property(
+        "source_id", chunk_ids, split_by_sep=True
+    )
 
     # Update nodes
     deleted_node_count = 0
     for node in all_related_nodes:
-        source_ids = split_string_by_multi_markers(node.get("source_id", ""), [GRAPH_FIELD_SEP])
+        source_ids = split_string_by_multi_markers(
+            node.get("source_id", ""), [GRAPH_FIELD_SEP]
+        )
         entity_name = node["entity_type"]
-        
+
         # Filter out chunk_ids from source_ids
         filtered_source_ids = [sid for sid in source_ids if sid not in chunk_ids]
-        
+
         if filtered_source_ids:  # If there are remaining source_ids, update the node
             node["source_id"] = GRAPH_FIELD_SEP.join(filtered_source_ids)
             await knowledge_graph_inst.upsert_node(entity_name, node)
@@ -425,11 +432,13 @@ async def delete_by_chunk_ids(
     # Update edges
     deleted_edge_count = 0
     for edge in all_related_edges:
-        source_ids = split_string_by_multi_markers(edge.get("source_id", ""), [GRAPH_FIELD_SEP])
-        
+        source_ids = split_string_by_multi_markers(
+            edge.get("source_id", ""), [GRAPH_FIELD_SEP]
+        )
+
         # Filter out chunk_ids from source_ids
         filtered_source_ids = [sid for sid in source_ids if sid not in chunk_ids]
-        
+
         if filtered_source_ids:  # If there are remaining source_ids, update the edge
             edge["source_id"] = GRAPH_FIELD_SEP.join(filtered_source_ids)
             await knowledge_graph_inst.upsert_edge(edge["source"], edge["target"], edge)
@@ -946,7 +955,8 @@ async def _find_related_text_unit_from_relationships(
     if any([v is None for v in all_text_units_lookup.values()]):
         logger.warning("Text chunks are missing, maybe the storage is damaged")
     all_text_units = [
-        {"id": k, **v} for k, v in all_text_units_lookup.items()
+        {"id": k, **v}
+        for k, v in all_text_units_lookup.items()
         if v is not None and v.get("data") is not None and "content" in v["data"]
     ]
     if not all_text_units:

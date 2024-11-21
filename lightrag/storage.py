@@ -12,7 +12,7 @@ from .utils import (
     load_json,
     write_json,
     compute_mdhash_id,
-    split_string_by_multi_markers
+    split_string_by_multi_markers,
 )
 
 from .base import (
@@ -52,11 +52,11 @@ class JsonKVStorage(BaseKVStorage):
             )
             for id in ids
         ]
-    
+
     async def get_by_field(self, field: str, values: list) -> dict[str, dict]:
         values_set = set(values)  # Convert to set for O(1) lookup
         return {
-            doc_id: doc 
+            doc_id: doc
             for doc_id, doc in self._data.items()
             if doc.get(field) in values_set
         }
@@ -101,32 +101,34 @@ class NanoVectorDBStorage(BaseVectorStorage):
         if not len(data):
             logger.warning("You insert an empty data to vector DB")
             return []
-        
+
         # Separate data into content changes and metadata-only changes
         content_changes = {}
         metadata_changes = {}
-        
+
         for k, v in data.items():
             existing = self._client.get([k])
-            if not existing or existing[0].get('content') != v.get('content'):
+            if not existing or existing[0].get("content") != v.get("content"):
                 content_changes[k] = v
             else:
                 metadata_changes[k] = v
-        
+
         results = []
-        
+
         # Handle metadata-only updates
         if metadata_changes:
             metadata_list = [
                 {
                     "__id__": k,
                     **{k1: v1 for k1, v1 in v.items() if k1 in self.meta_fields},
-                    "__vector__": self._client.get([k])[0]["__vector__"]  # Reuse existing embedding
+                    "__vector__": self._client.get([k])[0][
+                        "__vector__"
+                    ],  # Reuse existing embedding
                 }
                 for k, v in metadata_changes.items()
             ]
             results.extend(self._client.upsert(datas=metadata_list))
-        
+
         # Handle content changes that need new embeddings
         if content_changes:
             list_data = [
@@ -148,7 +150,7 @@ class NanoVectorDBStorage(BaseVectorStorage):
             for i, d in enumerate(list_data):
                 d["__vector__"] = embeddings[i]
             results.extend(self._client.upsert(datas=list_data))
-        
+
         return results
 
     async def query(self, query: str, top_k=5):
@@ -163,7 +165,7 @@ class NanoVectorDBStorage(BaseVectorStorage):
             {**dp, "id": dp["__id__"], "distance": dp["__metrics__"]} for dp in results
         ]
         return results
-    
+
     async def delete_by_ids(self, ids: list[str]):
         self._client.delete(ids)
 
@@ -336,9 +338,13 @@ class NetworkXStorage(BaseGraphStorage):
     async def delete_edge(self, source_node_id: str, target_node_id: str):
         if self._graph.has_edge(source_node_id, target_node_id):
             self._graph.remove_edge(source_node_id, target_node_id)
-            logger.debug(f"Edge {source_node_id}->{target_node_id} deleted from the graph.")
+            logger.debug(
+                f"Edge {source_node_id}->{target_node_id} deleted from the graph."
+            )
         else:
-            logger.warning(f"Edge {source_node_id}->{target_node_id} not found in the graph for deletion.")
+            logger.warning(
+                f"Edge {source_node_id}->{target_node_id} not found in the graph for deletion."
+            )
 
     async def embed_nodes(self, algorithm: str) -> tuple[np.ndarray, list[str]]:
         if algorithm not in self._node_embed_algorithms:
@@ -358,63 +364,57 @@ class NetworkXStorage(BaseGraphStorage):
         return embeddings, nodes_ids
 
     async def get_nodes_by_property(
-        self, 
-        property_name: str, 
-        property_value: Any,
-        split_by_sep: bool = False
+        self, property_name: str, property_value: Any, split_by_sep: bool = False
     ) -> list[dict]:
         matching_nodes = []
         # Convert property_value to list if it isn't already
-        search_values = property_value if isinstance(property_value, list) else [property_value]
-        
+        search_values = (
+            property_value if isinstance(property_value, list) else [property_value]
+        )
+
         for node, data in self._graph.nodes(data=True):
             prop_value = data.get(property_name)
             if prop_value is None:
                 continue
-                
+
             if split_by_sep:
                 # Split stored value by GRAPH_FIELD_SEP
-                stored_values = split_string_by_multi_markers(prop_value, [GRAPH_FIELD_SEP])
+                stored_values = split_string_by_multi_markers(
+                    prop_value, [GRAPH_FIELD_SEP]
+                )
                 # Check if any search value matches any stored value
                 if any(search_val in stored_values for search_val in search_values):
-                    matching_nodes.append({**data, 'id': node})
+                    matching_nodes.append({**data, "id": node})
             else:
                 # For non-split values, check if property value matches any search value
                 if prop_value in search_values:
-                    matching_nodes.append({**data, 'id': node})
+                    matching_nodes.append({**data, "id": node})
         return matching_nodes
 
     async def get_edges_by_property(
-        self, 
-        property_name: str, 
-        property_value: Any,
-        split_by_sep: bool = False
+        self, property_name: str, property_value: Any, split_by_sep: bool = False
     ) -> list[dict]:
         matching_edges = []
         # Convert property_value to list if it isn't already
-        search_values = property_value if isinstance(property_value, list) else [property_value]
-        
+        search_values = (
+            property_value if isinstance(property_value, list) else [property_value]
+        )
+
         for source, target, data in self._graph.edges(data=True):
             prop_value = data.get(property_name)
             if prop_value is None:
                 continue
-                
+
             if split_by_sep:
                 # Split stored value by GRAPH_FIELD_SEP
-                stored_values = split_string_by_multi_markers(prop_value, [GRAPH_FIELD_SEP])
+                stored_values = split_string_by_multi_markers(
+                    prop_value, [GRAPH_FIELD_SEP]
+                )
                 # Check if any search value matches any stored value
                 if any(search_val in stored_values for search_val in search_values):
-                    matching_edges.append({
-                        **data,
-                        'source': source,
-                        'target': target
-                    })
+                    matching_edges.append({**data, "source": source, "target": target})
             else:
                 # For non-split values, check if property value matches any search value
                 if prop_value in search_values:
-                    matching_edges.append({
-                        **data,
-                        'source': source,
-                        'target': target
-                    })
+                    matching_edges.append({**data, "source": source, "target": target})
         return matching_edges

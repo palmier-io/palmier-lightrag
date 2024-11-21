@@ -47,7 +47,7 @@ SUPPORT_LANGUAGES = [
     "typescript",
     "tsx",
     "yaml",
-    "xml"
+    "xml",
 ]
 
 FILES_TO_IGNORE = [

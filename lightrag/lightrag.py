@@ -228,17 +228,22 @@ class LightRAG:
             "OracleGraphStorage": OracleGraphStorage,
             # "ArangoDBStorage": ArangoDBStorage
         }
-    
+
     def insert_files(self, directory: str, file_paths: list[str]):
-        """ Palmier Specific - inserting file(s) to the knowledge graph """
+        """Palmier Specific - inserting file(s) to the knowledge graph"""
         loop = always_get_an_event_loop()
         return loop.run_until_complete(self.ainsert_files(directory, file_paths))
 
     async def ainsert_files(self, directory: str, file_paths: list[str]):
-        """ Palmier Specific - inserting file(s) to the knowledge graph """
+        """Palmier Specific - inserting file(s) to the knowledge graph"""
         update_storage = False
         try:
-            code_chunker = CodeChunker(directory, target_tokens=self.chunk_token_size, overlap_token_size=self.chunk_overlap_token_size, tiktoken_model=self.tiktoken_model_name)
+            code_chunker = CodeChunker(
+                directory,
+                target_tokens=self.chunk_token_size,
+                overlap_token_size=self.chunk_overlap_token_size,
+                tiktoken_model=self.tiktoken_model_name,
+            )
 
             # Create a new document for each file
             new_docs = {}
@@ -258,8 +263,10 @@ class LightRAG:
             new_docs = {k: v for k, v in new_docs.items() if k in _add_doc_keys}
 
             new_docs_file_paths = {v["file_path"]: k for k, v in new_docs.items()}
-            outdated_docs = await self.full_docs.get_by_field("file_path", list(new_docs_file_paths))
-            
+            outdated_docs = await self.full_docs.get_by_field(
+                "file_path", list(new_docs_file_paths)
+            )
+
             # Create mapping of old_doc_id -> new_doc_id based on matching file paths
             doc_id_mapping = {
                 old_doc_id: new_docs_file_paths[doc["file_path"]]
@@ -269,7 +276,7 @@ class LightRAG:
             if not len(new_docs):
                 logger.warning("All docs are already in the storage")
                 return
-            
+
             update_storage = True
             logger.info(f"[New Docs] inserting {len(new_docs)} docs")
             await self.full_docs.upsert(new_docs)
@@ -289,10 +296,14 @@ class LightRAG:
                 inserting_chunks.update(chunks)
 
             # Get all chunks belonging to outdated documents
-            outdated_chunks = await self.text_chunks.get_by_field("full_doc_id", list(doc_id_mapping.keys()))
-            
+            outdated_chunks = await self.text_chunks.get_by_field(
+                "full_doc_id", list(doc_id_mapping.keys())
+            )
+
             # Chunk keys to add, update, and remove
-            _add_chunk_keys = await self.text_chunks.filter_keys(list(inserting_chunks.keys()))
+            _add_chunk_keys = await self.text_chunks.filter_keys(
+                list(inserting_chunks.keys())
+            )
             _update_chunk_keys = set(inserting_chunks.keys()) - set(_add_chunk_keys)
             _remove_chunk_keys = set(outdated_chunks.keys()) - set(_update_chunk_keys)
 
@@ -304,7 +315,7 @@ class LightRAG:
             updating_chunks = {
                 k: v for k, v in inserting_chunks.items() if k in _update_chunk_keys
             }
-        
+
             if not len(adding_chunks):
                 logger.warning("All chunks are already in the storage")
                 return
@@ -326,11 +337,15 @@ class LightRAG:
                 return
             self.chunk_entity_relation_graph = maybe_new_kg
 
-            logger.info(f"[Update Chunks] updating {len(updating_chunks)} chunk metadata")
+            logger.info(
+                f"[Update Chunks] updating {len(updating_chunks)} chunk metadata"
+            )
             await self.chunks_vdb.upsert(updating_chunks)
             await self.text_chunks.upsert(updating_chunks)
 
-            logger.info(f"[Remove Chunks] removing {len(_remove_chunk_keys)} outdated chunks")
+            logger.info(
+                f"[Remove Chunks] removing {len(_remove_chunk_keys)} outdated chunks"
+            )
             await delete_by_chunk_ids(
                 list(_remove_chunk_keys),
                 self.chunk_entity_relation_graph,
@@ -351,16 +366,22 @@ class LightRAG:
     async def adelete_files(self, directory: str, file_paths: list[str]):
         update_storage = False
         try:
-            relative_file_paths = [file_path.replace(directory, "") for file_path in file_paths]
-            all_docs = await self.full_docs.get_by_field("file_path", relative_file_paths)
+            relative_file_paths = [
+                file_path.replace(directory, "") for file_path in file_paths
+            ]
+            all_docs = await self.full_docs.get_by_field(
+                "file_path", relative_file_paths
+            )
 
             if not len(all_docs):
                 logger.warning("Docs are not found in the storage")
                 return
-            
+
             update_storage = True
 
-            all_chunks = await self.text_chunks.get_by_field("full_doc_id", list(all_docs.keys()))
+            all_chunks = await self.text_chunks.get_by_field(
+                "full_doc_id", list(all_docs.keys())
+            )
 
             # Delete chunks
             logger.info(f"[Remove Chunks] removing {len(all_chunks)} chunks")
@@ -512,7 +533,7 @@ class LightRAG:
             raise ValueError(f"Unknown mode {param.mode}")
         await self._query_done()
         return response
-    
+
     async def _delete_done(self):
         tasks = []
         for storage_inst in [
