@@ -2,7 +2,6 @@ import pytest
 from lightrag.chunking.code_chunker import CodeChunker, CodeChunk, Position, ChunkType
 import os
 import tempfile
-from tree_sitter_languages import get_parser
 
 
 class TestCodeChunker:
@@ -49,7 +48,9 @@ def function2():
                 token_count=len(token_1),
                 tag={"language": "python"},
                 start=Position(line=0, character=0, byte=0),
-                end=Position(line=len(content_1.split("\n")), character=0, byte=len(token_1)),
+                end=Position(
+                    line=len(content_1.split("\n")), character=0, byte=len(token_1)
+                ),
                 chunk_type=ChunkType.TREE_SITTER,
             ),
             CodeChunk(
@@ -58,8 +59,14 @@ def function2():
                 content=content_2,
                 token_count=len(token_2),
                 tag={"language": "python"},
-                start=Position(line=len(content_1.split("\n")), character=0, byte=len(token_1)),
-                end=Position(line=len(full_content.split("\n")), character=0, byte=len(token_full)),
+                start=Position(
+                    line=len(content_1.split("\n")), character=0, byte=len(token_1)
+                ),
+                end=Position(
+                    line=len(full_content.split("\n")),
+                    character=0,
+                    byte=len(token_full),
+                ),
                 chunk_type=ChunkType.TREE_SITTER,
             ),
         ]
@@ -83,5 +90,7 @@ def function2():
 
         chunks = chunker.chunk_file(file_path)
         assert len(chunks) > 1
-        assert all(chunk["token_count"] <= chunker.target_tokens + chunker.overlap_token_size for chunk in chunks)
-
+        assert all(
+            chunk["token_count"] <= chunker.target_tokens + chunker.overlap_token_size
+            for chunk in chunks
+        )

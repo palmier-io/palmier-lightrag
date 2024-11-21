@@ -2,7 +2,6 @@ import pytest
 from lightrag.chunking.code_chunker import CodeChunker
 import os
 import tempfile
-from tree_sitter_languages import get_parser
 
 # Small target_tokens to force splitting
 target_tokens = 50
@@ -17,7 +16,9 @@ class TestLanguageSupport:
     @pytest.fixture
     def chunker(self, temp_dir):
         # Reduced target_tokens to force splitting
-        return CodeChunker(root_dir=temp_dir, target_tokens=target_tokens, overlap_token_size=10)
+        return CodeChunker(
+            root_dir=temp_dir, target_tokens=target_tokens, overlap_token_size=10
+        )
 
     def test_python_chunking(self, temp_dir, chunker):
         function_1 = """def function1():
@@ -172,8 +173,14 @@ func (p Person) Greet() string {
         code = struct_def + "\n" + method_def
         chunks = self._test_language(chunker, temp_dir, code, "test.go", "go")
 
-        assert chunks[0].content.strip() in struct_def or struct_def in chunks[0].content.strip()
-        assert chunks[1].content.strip() in method_def or method_def in chunks[1].content.strip()
+        assert (
+            chunks[0].content.strip() in struct_def
+            or struct_def in chunks[0].content.strip()
+        )
+        assert (
+            chunks[1].content.strip() in method_def
+            or method_def in chunks[1].content.strip()
+        )
 
     def test_java_chunking(self, temp_dir, chunker):
         class_def = """public class Person {
@@ -261,13 +268,18 @@ end"""
         # Verify chunk sizes
         for chunk in chunks:
             assert len(chunk["content"].strip()) > 0  # No empty chunks
-            assert chunk["token_count"] <= chunker.target_tokens + chunker.overlap_token_size
+            assert (
+                chunk["token_count"]
+                <= chunker.target_tokens + chunker.overlap_token_size
+            )
 
         # Convert dictionary chunks to a simpler format for testing
         return [SimpleChunk(chunk["content"], chunk["token_count"]) for chunk in chunks]
 
+
 class SimpleChunk:
     """Simple wrapper to maintain compatibility with existing tests"""
+
     def __init__(self, content, token_count):
         self.content = content
         self.token_count = token_count
