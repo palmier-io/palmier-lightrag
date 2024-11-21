@@ -1,12 +1,14 @@
 import os
 from pygments.lexers import get_lexer_for_filename
 from pygments.util import ClassNotFound
+from typing import Optional
 
 SUPPORT_LANGUAGES = [
     "bash",
     "c",
-    "cpp",
     "c_sharp",
+    "commonlisp",
+    "cpp",
     "css",
     "dockerfile",
     "dot",
@@ -21,7 +23,6 @@ SUPPORT_LANGUAGES = [
     "hcl",
     "html",
     "java",
-    "javascript",
     "javascript",
     "jsdoc",
     "json",
@@ -48,7 +49,6 @@ SUPPORT_LANGUAGES = [
     "typescript",
     "tsx",
     "yaml",
-    "xml",
 ]
 
 FILES_TO_IGNORE = [
@@ -60,7 +60,7 @@ FILES_TO_IGNORE = [
 ]
 
 
-def get_language_from_file(file_path):
+def get_language_from_file(file_path) -> Optional[str]:
     """
     Given a file path, extract the extension and use pygment lexer to identify the language.
     tsx is a special case, so we handle it separately.
@@ -74,6 +74,15 @@ def get_language_from_file(file_path):
 
     try:
         lexer = get_lexer_for_filename(file_path)
-        return lexer.name.lower()
+        name = lexer.name.lower()
+
+        # Handle special cases
+        match name:
+            case "c++":
+                return "cpp"
+            case "docker":
+                return "dockerfile"
+            case _:
+                return name
     except ClassNotFound:
         return None
