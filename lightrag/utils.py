@@ -280,7 +280,7 @@ def process_combine_contexts(hl, ll):
     seen = set()
 
     for item in list_hl + list_ll:
-        item_str = ','.join(item)  # Convert to string for deduplication
+        item_str = ",".join(item)  # Convert to string for deduplication
         if item_str and item_str not in seen:
             combined_sources.append(item)
             seen.add(item_str)

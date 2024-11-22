@@ -12,6 +12,7 @@ networkx
 ollama
 openai
 oracledb
+pygments
 pyvis
 tenacity
 # lmdeploy[all]
@@ -20,5 +21,7 @@ tenacity
 tiktoken
 torch
 transformers
+tree-sitter==0.21.3
+tree_sitter_languages==1.10.2
 xxhash
 anthropic

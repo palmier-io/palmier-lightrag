@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import TypedDict, Union, Literal, Generic, TypeVar
+from typing import TypedDict, Union, Literal, Generic, TypeVar, Any
 
 import numpy as np
 
@@ -56,6 +56,9 @@ class BaseVectorStorage(StorageNameSpace):
         """
         raise NotImplementedError
 
+    async def delete_by_ids(self, ids: list[str]):
+        raise NotImplementedError
+
 
 @dataclass
 class BaseKVStorage(Generic[T], StorageNameSpace):
@@ -72,6 +75,9 @@ class BaseKVStorage(Generic[T], StorageNameSpace):
     ) -> list[Union[T, None]]:
         raise NotImplementedError
 
+    async def get_by_field(self, field: str, values: list[str]) -> list[Union[T, None]]:
+        raise NotImplementedError
+
     async def filter_keys(self, data: list[str]) -> set[str]:
         """return un-exist keys"""
         raise NotImplementedError
@@ -80,6 +86,9 @@ class BaseKVStorage(Generic[T], StorageNameSpace):
         raise NotImplementedError
 
     async def drop(self):
+        raise NotImplementedError
+
+    async def delete_by_ids(self, ids: list[str]):
         raise NotImplementedError
 
 
@@ -123,5 +132,38 @@ class BaseGraphStorage(StorageNameSpace):
     async def delete_node(self, node_id: str):
         raise NotImplementedError
 
+    async def delete_edge(self, source_node_id: str, target_node_id: str):
+        raise NotImplementedError
+
     async def embed_nodes(self, algorithm: str) -> tuple[np.ndarray, list[str]]:
         raise NotImplementedError("Node embedding is not used in lightrag.")
+
+    async def get_nodes_by_property(
+        self, property_name: str, property_value: Any, split_by_sep: bool = False
+    ) -> list[dict]:
+        """Get all nodes that have a specific property value.
+
+        Args:
+            property_name: The name of the property to match
+            property_value: The value to match against
+            split_by_sep: If True, treats property value as GRAPH_FIELD_SEP-separated
+                         string and matches if value exists in any part
+        Returns:
+            List of node dictionaries matching the criteria
+        """
+        raise NotImplementedError
+
+    async def get_edges_by_property(
+        self, property_name: str, property_value: Any, split_by_sep: bool = False
+    ) -> list[dict]:
+        """Get all edges that have a specific property value.
+
+        Args:
+            property_name: The name of the property to match
+            property_value: The value to match against
+            split_by_sep: If True, treats property value as GRAPH_FIELD_SEP-separated
+                         string and matches if value exists in any part
+        Returns:
+            List of edge dictionaries matching the criteria
+        """
+        raise NotImplementedError

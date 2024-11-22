@@ -29,7 +29,7 @@ from .prompt import GRAPH_FIELD_SEP, PROMPTS
 
 
 def chunking_by_token_size(
-    content: str, overlap_token_size=128, max_token_size=1024, tiktoken_model="gpt-4o"
+    content: str, overlap_token_size=128, max_token_size=800, tiktoken_model="gpt-4o"
 ):
     tokens = encode_string_by_tiktoken(content, model_name=tiktoken_model)
     results = []
@@ -129,39 +129,49 @@ async def _merge_nodes_then_upsert(
     knowledge_graph_inst: BaseGraphStorage,
     global_config: dict,
 ):
+    source_descriptions = {}
     already_entitiy_types = []
-    already_source_ids = []
-    already_description = []
 
+    # Get existing node data if it exists
     already_node = await knowledge_graph_inst.get_node(entity_name)
     if already_node is not None:
         already_entitiy_types.append(already_node["entity_type"])
-        already_source_ids.extend(
-            split_string_by_multi_markers(already_node["source_id"], [GRAPH_FIELD_SEP])
+        # Split and recreate the mapping from existing data
+        existing_sources = split_string_by_multi_markers(
+            already_node["source_id"], [GRAPH_FIELD_SEP]
         )
-        already_description.append(already_node["description"])
+        existing_descriptions = split_string_by_multi_markers(
+            already_node["description"], [GRAPH_FIELD_SEP]
+        )
+        for src, desc in zip(existing_sources, existing_descriptions):
+            source_descriptions[src] = desc
 
+    # Add new data to the mapping
+    for dp in nodes_data:
+        source_descriptions[dp["source_id"]] = dp["description"]
+        already_entitiy_types.append(dp["entity_type"])
+
+    # Get most common entity type
     entity_type = sorted(
-        Counter(
-            [dp["entity_type"] for dp in nodes_data] + already_entitiy_types
-        ).items(),
+        Counter(already_entitiy_types).items(),
         key=lambda x: x[1],
         reverse=True,
     )[0][0]
-    description = GRAPH_FIELD_SEP.join(
-        sorted(set([dp["description"] for dp in nodes_data] + already_description))
-    )
-    source_id = GRAPH_FIELD_SEP.join(
-        set([dp["source_id"] for dp in nodes_data] + already_source_ids)
-    )
+
+    # Join source_ids and descriptions while maintaining the mapping
+    source_id = GRAPH_FIELD_SEP.join(source_descriptions.keys())
+    description = GRAPH_FIELD_SEP.join(source_descriptions.values())
+
     description = await _handle_entity_relation_summary(
         entity_name, description, global_config
     )
+
     node_data = dict(
         entity_type=entity_type,
         description=description,
         source_id=source_id,
     )
+
     await knowledge_graph_inst.upsert_node(
         entity_name,
         node_data=node_data,
@@ -387,6 +397,74 @@ async def extract_entities(
         await relationships_vdb.upsert(data_for_vdb)
 
     return knowledge_graph_inst
+
+
+async def delete_by_chunk_ids(
+    chunk_ids: list[str],
+    knowledge_graph_inst: BaseGraphStorage,
+    entities_vdb: BaseVectorStorage,
+    relationships_vdb: BaseVectorStorage,
+    chunks_vdb: BaseVectorStorage,
+    text_chunks_db: BaseKVStorage[TextChunkSchema],
+):
+    # Remove chunks from vector db and text chunks
+    await chunks_vdb.delete_by_ids(chunk_ids)
+    await text_chunks_db.delete_by_ids(chunk_ids)
+
+    # Find all nodes and edges that are connected to the chunks
+    all_related_nodes = await knowledge_graph_inst.get_nodes_by_property(
+        "source_id", chunk_ids, split_by_sep=True
+    )
+    all_related_edges = await knowledge_graph_inst.get_edges_by_property(
+        "source_id", chunk_ids, split_by_sep=True
+    )
+
+    # Update nodes
+    deleted_node_count = 0
+    for node in all_related_nodes:
+        node_name = node.get("id", "")
+
+        # Recreate the mapping
+        source_descriptions = {}
+        sources = split_string_by_multi_markers(
+            node.get("source_id", ""), [GRAPH_FIELD_SEP]
+        )
+        descriptions = split_string_by_multi_markers(
+            node.get("description", ""), [GRAPH_FIELD_SEP]
+        )
+
+        for src, desc in zip(sources, descriptions):
+            if src not in chunk_ids:  # Only keep sources we're not deleting
+                source_descriptions[src] = desc
+
+        if source_descriptions:  # If there are remaining source_ids, update the node
+            node["source_id"] = GRAPH_FIELD_SEP.join(source_descriptions.keys())
+            node["description"] = GRAPH_FIELD_SEP.join(source_descriptions.values())
+            await knowledge_graph_inst.upsert_node(node_name, node)
+        else:  # If no source_ids remain, delete the node
+            await knowledge_graph_inst.delete_node(node_name)
+            await entities_vdb.delete_entity(node_name)
+            await relationships_vdb.delete_relation(node_name)
+            deleted_node_count += 1
+
+    # Update edges
+    deleted_edge_count = 0
+    for edge in all_related_edges:
+        source_ids = split_string_by_multi_markers(
+            edge.get("source_id", ""), [GRAPH_FIELD_SEP]
+        )
+
+        # Filter out chunk_ids from source_ids
+        filtered_source_ids = [sid for sid in source_ids if sid not in chunk_ids]
+
+        if filtered_source_ids:  # If there are remaining source_ids, update the edge
+            edge["source_id"] = GRAPH_FIELD_SEP.join(filtered_source_ids)
+            await knowledge_graph_inst.upsert_edge(edge["source"], edge["target"], edge)
+        else:  # If no source_ids remain, delete the edge
+            await knowledge_graph_inst.delete_edge(edge["source"], edge["target"])
+            deleted_edge_count += 1
+
+    logger.info(f"Deleted {deleted_node_count} nodes and {deleted_edge_count} edges")
 
 
 async def local_query(
@@ -895,8 +973,13 @@ async def _find_related_text_unit_from_relationships(
     if any([v is None for v in all_text_units_lookup.values()]):
         logger.warning("Text chunks are missing, maybe the storage is damaged")
     all_text_units = [
-        {"id": k, **v} for k, v in all_text_units_lookup.items() if v is not None
+        {"id": k, **v}
+        for k, v in all_text_units_lookup.items()
+        if v is not None and v.get("data") is not None and "content" in v["data"]
     ]
+    if not all_text_units:
+        logger.warning("No valid text units found")
+        return []
     all_text_units = sorted(all_text_units, key=lambda x: x["order"])
     all_text_units = truncate_list_by_token_size(
         all_text_units,

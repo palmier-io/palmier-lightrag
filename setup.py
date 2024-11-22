@@ -57,7 +57,7 @@ long_description = read_long_description()
 requirements = read_requirements()
 
 setuptools.setup(
-    name="lightrag-hku",
+    name="palmier-lightrag",
     url=metadata["__url__"],
     version=metadata["__version__"],
     author=metadata["__author__"],

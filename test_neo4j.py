@@ -16,9 +16,9 @@ if not os.path.exists(WORKING_DIR):
 
 rag = LightRAG(
     working_dir=WORKING_DIR,
-    llm_model_func=anthropic_complete,
-    # llm_model_func=gpt_4o_mini_complete,  # Use gpt_4o_mini_complete LLM model
-    # kg="Neo4JStorage",
+    llm_model_func=gpt_4o_mini_complete,  # Use gpt_4o_mini_complete LLM model
+    graph_storage="Neo4JStorage",
+    kv_storage="SupabaseKVStorage",
     log_level="INFO",
     # llm_model_func=gpt_4o_complete  # Optionally, use a stronger model
 )

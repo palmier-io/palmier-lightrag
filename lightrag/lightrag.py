@@ -12,6 +12,7 @@ from .llm import (
 from .operate import (
     chunking_by_token_size,
     extract_entities,
+    delete_by_chunk_ids,
     local_query,
     global_query,
     hybrid_query,
@@ -36,9 +37,14 @@ from .base import (
 
 from .storage import (
     JsonKVStorage,
+    # SupabaseKVStorage,
     NanoVectorDBStorage,
     NetworkXStorage,
 )
+
+from .chunking.language_parsers import get_language_from_file
+
+from .chunking.code_chunker import CodeChunker
 
 from .kg.neo4j_impl import Neo4JStorage
 
@@ -77,7 +83,7 @@ class LightRAG:
     log_level: str = field(default=current_log_level)
 
     # text chunking
-    chunk_token_size: int = 1200
+    chunk_token_size: int = 800
     chunk_overlap_token_size: int = 100
     tiktoken_model_name: str = "gpt-4o-mini"
 
@@ -212,6 +218,7 @@ class LightRAG:
             # kv storage
             "JsonKVStorage": JsonKVStorage,
             "OracleKVStorage": OracleKVStorage,
+            # "SupabaseKVStorage": SupabaseKVStorage,
             # vector storage
             "NanoVectorDBStorage": NanoVectorDBStorage,
             "OracleVectorDBStorage": OracleVectorDBStorage,
@@ -221,6 +228,180 @@ class LightRAG:
             "OracleGraphStorage": OracleGraphStorage,
             # "ArangoDBStorage": ArangoDBStorage
         }
+
+    def insert_files(self, directory: str, file_paths: list[str]):
+        """Palmier Specific - inserting file(s) to the knowledge graph"""
+        loop = always_get_an_event_loop()
+        return loop.run_until_complete(self.ainsert_files(directory, file_paths))
+
+    async def ainsert_files(self, directory: str, file_paths: list[str]):
+        """Palmier Specific - inserting file(s) to the knowledge graph"""
+        update_storage = False
+        try:
+            code_chunker = CodeChunker(
+                directory,
+                target_tokens=self.chunk_token_size,
+                overlap_token_size=self.chunk_overlap_token_size,
+                tiktoken_model=self.tiktoken_model_name,
+            )
+
+            # Create a new document for each file
+            new_docs = {}
+            for file_path in file_paths:
+                with open(file_path, "r") as f:
+                    content = f.read()
+
+                language = get_language_from_file(file_path)
+                new_docs[compute_mdhash_id(content.strip(), prefix="doc-")] = {
+                    "file_path": file_path,
+                    "language": language,
+                    "content": content.strip(),
+                }
+
+            # Filter out any unchanged documents
+            _add_doc_keys = await self.full_docs.filter_keys(list(new_docs.keys()))
+            new_docs = {k: v for k, v in new_docs.items() if k in _add_doc_keys}
+
+            new_docs_file_paths = {v["file_path"]: k for k, v in new_docs.items()}
+            outdated_docs = await self.full_docs.get_by_field(
+                "file_path", list(new_docs_file_paths)
+            )
+
+            # Create mapping of old_doc_id -> new_doc_id based on matching file paths
+            doc_id_mapping = {
+                old_doc_id: new_docs_file_paths[doc["file_path"]]
+                for old_doc_id, doc in outdated_docs.items()
+            }
+
+            if not len(new_docs):
+                logger.warning("All docs are already in the storage")
+                return
+
+            update_storage = True
+            logger.info(f"[New Docs] inserting {len(new_docs)} docs")
+            await self.full_docs.upsert(new_docs)
+            logger.info(f"[Remove Docs] removing {len(doc_id_mapping)} docs")
+            await self.full_docs.delete_by_ids(list(doc_id_mapping.keys()))
+
+            # Chunking by either tree-sitter or token size
+            inserting_chunks = {}
+            for doc_key, doc in new_docs.items():
+                chunks = {
+                    compute_mdhash_id(dp["content"], prefix="chunk-"): {
+                        **dp,
+                        "full_doc_id": doc_key,
+                    }
+                    for dp in code_chunker.chunk_file(doc["file_path"])
+                }
+                inserting_chunks.update(chunks)
+
+            # Get all chunks belonging to outdated documents
+            outdated_chunks = await self.text_chunks.get_by_field(
+                "full_doc_id", list(doc_id_mapping.keys())
+            )
+
+            # Chunk keys to add, update, and remove
+            _add_chunk_keys = await self.text_chunks.filter_keys(
+                list(inserting_chunks.keys())
+            )
+            _update_chunk_keys = set(inserting_chunks.keys()) - set(_add_chunk_keys)
+            _remove_chunk_keys = set(outdated_chunks.keys()) - set(_update_chunk_keys)
+
+            # Filter inserting_chunks to only include new chunks
+            adding_chunks = {
+                k: v for k, v in inserting_chunks.items() if k in _add_chunk_keys
+            }
+
+            updating_chunks = {
+                k: v for k, v in inserting_chunks.items() if k in _update_chunk_keys
+            }
+
+            if not len(adding_chunks):
+                logger.warning("All chunks are already in the storage")
+                return
+            else:
+                logger.info(f"[New Chunks] inserting {len(adding_chunks)} chunks")
+                await self.chunks_vdb.upsert(adding_chunks)
+                await self.text_chunks.upsert(adding_chunks)
+
+            logger.info("[Entity Extraction]...")
+            maybe_new_kg = await extract_entities(
+                adding_chunks,
+                knowledge_graph_inst=self.chunk_entity_relation_graph,
+                entity_vdb=self.entities_vdb,
+                relationships_vdb=self.relationships_vdb,
+                global_config=asdict(self),
+            )
+            if maybe_new_kg is None:
+                logger.warning("No new entities and relationships found")
+                return
+            self.chunk_entity_relation_graph = maybe_new_kg
+
+            if len(updating_chunks) > 0:
+                logger.info(
+                    f"[Update Chunks] updating {len(updating_chunks)} chunk metadata"
+                )
+                await self.chunks_vdb.upsert(updating_chunks)
+                await self.text_chunks.upsert(updating_chunks)
+
+            if len(_remove_chunk_keys) > 0:
+                logger.info(
+                    f"[Remove Chunks] removing {len(_remove_chunk_keys)} outdated chunks"
+                )
+                await delete_by_chunk_ids(
+                    list(_remove_chunk_keys),
+                    self.chunk_entity_relation_graph,
+                    self.entities_vdb,
+                    self.relationships_vdb,
+                    self.chunks_vdb,
+                    self.text_chunks,
+                )
+
+        finally:
+            if update_storage:
+                await self._insert_done()
+
+    def delete_files(self, directory: str, file_paths: list[str]):
+        loop = always_get_an_event_loop()
+        return loop.run_until_complete(self.adelete_files(directory, file_paths))
+
+    async def adelete_files(self, directory: str, file_paths: list[str]):
+        update_storage = False
+        try:
+            relative_file_paths = [
+                file_path.replace(directory, "") for file_path in file_paths
+            ]
+            all_docs = await self.full_docs.get_by_field(
+                "file_path", relative_file_paths
+            )
+
+            if not len(all_docs):
+                logger.warning("Docs are not found in the storage")
+                return
+
+            update_storage = True
+
+            all_chunks = await self.text_chunks.get_by_field(
+                "full_doc_id", list(all_docs.keys())
+            )
+
+            # Delete chunks
+            logger.info(f"[Remove Chunks] removing {len(all_chunks)} chunks")
+            await delete_by_chunk_ids(
+                list(all_chunks.keys()),
+                self.chunk_entity_relation_graph,
+                self.entities_vdb,
+                self.relationships_vdb,
+                self.chunks_vdb,
+                self.text_chunks,
+            )
+
+            # Delete docs
+            logger.info(f"[Remove Docs] removing {len(all_docs)} docs")
+            await self.full_docs.delete_by_ids(list(all_docs.keys()))
+        finally:
+            if update_storage:
+                await self._delete_done()
 
     def insert(self, string_or_strings):
         loop = always_get_an_event_loop()
@@ -354,6 +535,21 @@ class LightRAG:
             raise ValueError(f"Unknown mode {param.mode}")
         await self._query_done()
         return response
+
+    async def _delete_done(self):
+        tasks = []
+        for storage_inst in [
+            self.full_docs,
+            self.text_chunks,
+            self.chunks_vdb,
+            self.entities_vdb,
+            self.relationships_vdb,
+            self.chunk_entity_relation_graph,
+        ]:
+            if storage_inst is None:
+                continue
+            tasks.append(cast(StorageNameSpace, storage_inst).index_done_callback())
+        await asyncio.gather(*tasks)
 
     async def _query_done(self):
         tasks = []
