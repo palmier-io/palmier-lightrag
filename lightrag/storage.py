@@ -333,7 +333,7 @@ class NetworkXStorage(BaseGraphStorage):
             self._graph.remove_node(node_id)
             logger.debug(f"Node {node_id} deleted from the graph.")
         else:
-            logger.warning(f"Node {node_id} not found in the graph for deletion.")
+            logger.debug(f"Node {node_id} not found in the graph for deletion.")
 
     async def delete_edge(self, source_node_id: str, target_node_id: str):
         if self._graph.has_edge(source_node_id, target_node_id):
@@ -342,7 +342,7 @@ class NetworkXStorage(BaseGraphStorage):
                 f"Edge {source_node_id}->{target_node_id} deleted from the graph."
             )
         else:
-            logger.warning(
+            logger.debug(
                 f"Edge {source_node_id}->{target_node_id} not found in the graph for deletion."
             )
 

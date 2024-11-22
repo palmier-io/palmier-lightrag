@@ -337,23 +337,25 @@ class LightRAG:
                 return
             self.chunk_entity_relation_graph = maybe_new_kg
 
-            logger.info(
-                f"[Update Chunks] updating {len(updating_chunks)} chunk metadata"
-            )
-            await self.chunks_vdb.upsert(updating_chunks)
-            await self.text_chunks.upsert(updating_chunks)
+            if len(updating_chunks) > 0:
+                logger.info(
+                    f"[Update Chunks] updating {len(updating_chunks)} chunk metadata"
+                )
+                await self.chunks_vdb.upsert(updating_chunks)
+                await self.text_chunks.upsert(updating_chunks)
 
-            logger.info(
-                f"[Remove Chunks] removing {len(_remove_chunk_keys)} outdated chunks"
-            )
-            await delete_by_chunk_ids(
-                list(_remove_chunk_keys),
-                self.chunk_entity_relation_graph,
-                self.entities_vdb,
-                self.relationships_vdb,
-                self.chunks_vdb,
-                self.text_chunks,
-            )
+            if len(_remove_chunk_keys) > 0:
+                logger.info(
+                    f"[Remove Chunks] removing {len(_remove_chunk_keys)} outdated chunks"
+                )
+                await delete_by_chunk_ids(
+                    list(_remove_chunk_keys),
+                    self.chunk_entity_relation_graph,
+                    self.entities_vdb,
+                    self.relationships_vdb,
+                    self.chunks_vdb,
+                    self.text_chunks,
+                )
 
         finally:
             if update_storage:
@@ -539,6 +541,7 @@ class LightRAG:
         for storage_inst in [
             self.full_docs,
             self.text_chunks,
+            self.chunks_vdb,
             self.entities_vdb,
             self.relationships_vdb,
             self.chunk_entity_relation_graph,
