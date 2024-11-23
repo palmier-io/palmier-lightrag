@@ -37,9 +37,12 @@ from .base import (
 
 from .storage import (
     JsonKVStorage,
-    # SupabaseKVStorage,
     NanoVectorDBStorage,
     NetworkXStorage,
+)
+
+from .palmier_storage import (
+    SupabaseChunksStorage
 )
 
 from .chunking.language_parsers import get_language_from_file
@@ -71,13 +74,20 @@ def always_get_an_event_loop() -> asyncio.AbstractEventLoop:
 
 @dataclass
 class LightRAG:
+    repository: str
+    repository_id: str
+
     working_dir: str = field(
         default_factory=lambda: f"./lightrag_cache_{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}"
     )
 
-    kv_storage: str = field(default="JsonKVStorage")
+    # kv_storage: str = field(default="JsonKVStorage")
     vector_storage: str = field(default="NanoVectorDBStorage")
     graph_storage: str = field(default="NetworkXStorage")
+
+    docs_storage: str = field(default="JsonKVStorage")
+    chunks_storage: str = field(default="JsonKVStorage")
+    llm_response_cache_storage: str = field(default="JsonKVStorage")
 
     current_log_level = logger.level
     log_level: str = field(default=current_log_level)
@@ -137,8 +147,17 @@ class LightRAG:
 
         # @TODO: should move all storage setup here to leverage initial start params attached to self.
 
-        self.key_string_value_json_storage_cls: Type[BaseKVStorage] = (
-            self._get_storage_class()[self.kv_storage]
+        # self.key_string_value_json_storage_cls: Type[BaseKVStorage] = (
+        #     self._get_storage_class()[self.kv_storage]
+        # )
+        self.docs_storage_cls: Type[BaseKVStorage] = (
+            self._get_storage_class()[self.docs_storage]
+        )
+        self.chunks_storage_cls: Type[BaseKVStorage] = (
+            self._get_storage_class()[self.chunks_storage]
+        )
+        self.llm_response_cache_storage_cls: Type[BaseKVStorage] = (
+            self._get_storage_class()[self.llm_response_cache_storage]
         )
         self.vector_db_storage_cls: Type[BaseVectorStorage] = self._get_storage_class()[
             self.vector_storage
@@ -152,7 +171,7 @@ class LightRAG:
             os.makedirs(self.working_dir)
 
         self.llm_response_cache = (
-            self.key_string_value_json_storage_cls(
+            self.llm_response_cache_storage_cls(
                 namespace="llm_response_cache",
                 global_config=asdict(self),
                 embedding_func=None,
@@ -168,12 +187,12 @@ class LightRAG:
         ####
         # add embedding func by walter
         ####
-        self.full_docs = self.key_string_value_json_storage_cls(
+        self.full_docs = self.docs_storage_cls(
             namespace="full_docs",
             global_config=asdict(self),
             embedding_func=self.embedding_func,
         )
-        self.text_chunks = self.key_string_value_json_storage_cls(
+        self.text_chunks = self.chunks_storage_cls(
             namespace="text_chunks",
             global_config=asdict(self),
             embedding_func=self.embedding_func,
@@ -218,7 +237,7 @@ class LightRAG:
             # kv storage
             "JsonKVStorage": JsonKVStorage,
             "OracleKVStorage": OracleKVStorage,
-            # "SupabaseKVStorage": SupabaseKVStorage,
+            "SupabaseChunksStorage": SupabaseChunksStorage,
             # vector storage
             "NanoVectorDBStorage": NanoVectorDBStorage,
             "OracleVectorDBStorage": OracleVectorDBStorage,
