@@ -42,7 +42,8 @@ from .storage import (
 )
 
 from .palmier_storage import (
-    SupabaseChunksStorage
+    SupabaseChunksStorage,
+    S3DocsStorage
 )
 
 from .chunking.language_parsers import get_language_from_file
@@ -74,14 +75,11 @@ def always_get_an_event_loop() -> asyncio.AbstractEventLoop:
 
 @dataclass
 class LightRAG:
-    repository: str
-    repository_id: str
-
     working_dir: str = field(
         default_factory=lambda: f"./lightrag_cache_{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}"
     )
 
-    # kv_storage: str = field(default="JsonKVStorage")
+    # storage
     vector_storage: str = field(default="NanoVectorDBStorage")
     graph_storage: str = field(default="NetworkXStorage")
 
@@ -133,6 +131,7 @@ class LightRAG:
 
     # extension
     addon_params: dict = field(default_factory=dict)
+    storage_params: dict = field(default_factory=dict)
     convert_response_to_json_func: callable = convert_response_to_json
 
     def __post_init__(self):
@@ -145,26 +144,21 @@ class LightRAG:
         _print_config = ",\n  ".join([f"{k} = {v}" for k, v in asdict(self).items()])
         logger.debug(f"LightRAG init with param:\n  {_print_config}\n")
 
-        # @TODO: should move all storage setup here to leverage initial start params attached to self.
+        # Initialize storage classes with parameters from storage_params
+        storage_classes = self._get_storage_class()
+        
+        # Helper function to get storage class with params
+        def get_storage_with_params(storage_name: str) -> Type:
+            storage_cls = storage_classes[storage_name]
+            storage_params = self.storage_params.get(storage_name, {})
+            return partial(storage_cls, **storage_params)
 
-        # self.key_string_value_json_storage_cls: Type[BaseKVStorage] = (
-        #     self._get_storage_class()[self.kv_storage]
-        # )
-        self.docs_storage_cls: Type[BaseKVStorage] = (
-            self._get_storage_class()[self.docs_storage]
-        )
-        self.chunks_storage_cls: Type[BaseKVStorage] = (
-            self._get_storage_class()[self.chunks_storage]
-        )
-        self.llm_response_cache_storage_cls: Type[BaseKVStorage] = (
-            self._get_storage_class()[self.llm_response_cache_storage]
-        )
-        self.vector_db_storage_cls: Type[BaseVectorStorage] = self._get_storage_class()[
-            self.vector_storage
-        ]
-        self.graph_storage_cls: Type[BaseGraphStorage] = self._get_storage_class()[
-            self.graph_storage
-        ]
+        # Initialize all storage classes with their specific params
+        self.docs_storage_cls = get_storage_with_params(self.docs_storage)
+        self.chunks_storage_cls = get_storage_with_params(self.chunks_storage)
+        self.llm_response_cache_storage_cls = get_storage_with_params(self.llm_response_cache_storage)
+        self.vector_db_storage_cls = get_storage_with_params(self.vector_storage)
+        self.graph_storage_cls = get_storage_with_params(self.graph_storage)
 
         if not os.path.exists(self.working_dir):
             logger.info(f"Creating working directory {self.working_dir}")
@@ -238,6 +232,7 @@ class LightRAG:
             "JsonKVStorage": JsonKVStorage,
             "OracleKVStorage": OracleKVStorage,
             "SupabaseChunksStorage": SupabaseChunksStorage,
+            "S3DocsStorage": S3DocsStorage,
             # vector storage
             "NanoVectorDBStorage": NanoVectorDBStorage,
             "OracleVectorDBStorage": OracleVectorDBStorage,
@@ -271,71 +266,53 @@ class LightRAG:
                     content = f.read()
 
                 language = get_language_from_file(file_path)
-                new_docs[compute_mdhash_id(content.strip(), prefix="doc-")] = {
+                # use hash(file_path) as doc_id
+                new_docs[compute_mdhash_id(file_path.strip(), prefix="doc-")] = {
                     "file_path": file_path,
                     "language": language,
                     "content": content.strip(),
                 }
 
-            # Filter out any unchanged documents
-            _add_doc_keys = await self.full_docs.filter_keys(list(new_docs.keys()))
-            new_docs = {k: v for k, v in new_docs.items() if k in _add_doc_keys}
-
-            new_docs_file_paths = {v["file_path"]: k for k, v in new_docs.items()}
-            outdated_docs = await self.full_docs.get_by_field(
-                "file_path", list(new_docs_file_paths)
-            )
-
-            # Create mapping of old_doc_id -> new_doc_id based on matching file paths
-            doc_id_mapping = {
-                old_doc_id: new_docs_file_paths[doc["file_path"]]
-                for old_doc_id, doc in outdated_docs.items()
-            }
-
-            if not len(new_docs):
-                logger.warning("All docs are already in the storage")
-                return
-
             update_storage = True
-            logger.info(f"[New Docs] inserting {len(new_docs)} docs")
+            logger.info(f"[New Docs] upserting {len(new_docs)} docs")
             await self.full_docs.upsert(new_docs)
-            logger.info(f"[Remove Docs] removing {len(doc_id_mapping)} docs")
-            await self.full_docs.delete_by_ids(list(doc_id_mapping.keys()))
 
             # Chunking by either tree-sitter or token size
-            inserting_chunks = {}
+            new_chunks = {}
             for doc_key, doc in new_docs.items():
                 chunks = {
+                    # use hash(content) as chunk_id
                     compute_mdhash_id(dp["content"], prefix="chunk-"): {
                         **dp,
                         "full_doc_id": doc_key,
                     }
                     for dp in code_chunker.chunk_file(doc["file_path"])
                 }
-                inserting_chunks.update(chunks)
+                new_chunks.update(chunks)
 
-            # Get all chunks belonging to outdated documents
-            outdated_chunks = await self.text_chunks.get_by_field(
-                "full_doc_id", list(doc_id_mapping.keys())
+            # Get all exsiting chunks belonging to new docs
+            previous_chunks = await self.text_chunks.get_by_field(
+                "full_doc_id", list(new_docs.keys())
             )
 
-            # Chunk keys to add, update, and remove
-            _add_chunk_keys = await self.text_chunks.filter_keys(
-                list(inserting_chunks.keys())
-            )
-            _update_chunk_keys = set(inserting_chunks.keys()) - set(_add_chunk_keys)
-            _remove_chunk_keys = set(outdated_chunks.keys()) - set(_update_chunk_keys)
+            # Filter out chunks that have new content
+            _add_chunks_keys = set(new_chunks.keys()) - set(previous_chunks.keys())
 
-            # Filter inserting_chunks to only include new chunks
+            # Filter out outdated chunks
+            _remove_chunks_keys = set(previous_chunks.keys()) - set(new_chunks.keys())
+
+            # Filter out chunks that only need metadata update (no content change)
+            _update_chunks_keys = set(previous_chunks.keys()) - set(_remove_chunks_keys)
+
             adding_chunks = {
-                k: v for k, v in inserting_chunks.items() if k in _add_chunk_keys
+                k: v for k, v in new_chunks.items() if k in _add_chunks_keys
             }
 
             updating_chunks = {
-                k: v for k, v in inserting_chunks.items() if k in _update_chunk_keys
+                k: v for k, v in new_chunks.items() if k in _update_chunks_keys
             }
 
-            if not len(adding_chunks):
+            if not len(_add_chunks_keys):
                 logger.warning("All chunks are already in the storage")
                 return
             else:
@@ -363,12 +340,12 @@ class LightRAG:
                 await self.chunks_vdb.upsert(updating_chunks)
                 await self.text_chunks.upsert(updating_chunks)
 
-            if len(_remove_chunk_keys) > 0:
+            if len(_remove_chunks_keys) > 0:
                 logger.info(
-                    f"[Remove Chunks] removing {len(_remove_chunk_keys)} outdated chunks"
+                    f"[Remove Chunks] removing {len(_remove_chunks_keys)} outdated chunks"
                 )
                 await delete_by_chunk_ids(
-                    list(_remove_chunk_keys),
+                    list(_remove_chunks_keys),
                     self.chunk_entity_relation_graph,
                     self.entities_vdb,
                     self.relationships_vdb,

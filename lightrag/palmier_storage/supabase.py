@@ -1,11 +1,9 @@
 from ..base import BaseKVStorage
 from ..utils import logger
-from typing import Union, TypeVar, Optional
+from typing import TypeVar, Optional
 from os import getenv
 from supabase import create_client
 from dataclasses import dataclass
-
-T = TypeVar("T")
 
 @dataclass
 class SupabaseChunksStorage(BaseKVStorage):
@@ -13,15 +11,30 @@ class SupabaseChunksStorage(BaseKVStorage):
         # Get Supabase credentials from environment variables
         supabase_url = getenv("SUPABASE_URL")
         supabase_key = getenv("SUPABASE_KEY")
-        
+
         if not supabase_url or not supabase_key:
             raise ValueError("SUPABASE_URL and SUPABASE_KEY environment variables must be set")
         
+        # Get storage params, raising error if not present
+        storage_params = self.global_config.get("storage_params")
+        if not storage_params:
+            raise ValueError("storage_params must be provided in global_config")
+            
+        supabase_params = storage_params.get("supabase")
+        if not supabase_params:
+            raise ValueError("supabase configuration must be provided in storage_params")
+        
+        # Get required parameters, raising specific errors if any are missing
+        try:
+            self.table_name = supabase_params["table_name"]
+            self.repo = storage_params["repository"]
+            self.repo_id = storage_params["repository_id"]
+        except KeyError as e:
+            raise ValueError(f"Missing required parameter in supabase config: {e.args[0]}")
+        
         # Create Supabase client
         self.client = create_client(supabase_url, supabase_key)
-        self.table = self.client.table(f"lightrag_{self.namespace}")
-        self.repo = self.global_config["repository"]
-        self.repo_id = self.global_config["repository_id"]
+        self.table = self.client.table(self.table_name)
         logger.info(f"Initialized Supabase chunks storage for repository {self.repo}")
 
     async def all_keys(self) -> list[str]:
