@@ -15,6 +15,8 @@ class S3DocsStorage(BaseKVStorage):
         if not aws_access_key_id or not aws_secret_access_key:
             raise ValueError("AWS_S3_ACCESS_KEY_ID and AWS_S3_SECRET_ACCESS_KEY must be set in environment variables")
 
+        environment = self.global_config.get("environment", "dev")
+
         # Get storage params, raising error if not present
         storage_params = self.global_config.get("storage_params")
         if not storage_params:
@@ -26,7 +28,7 @@ class S3DocsStorage(BaseKVStorage):
         
         # Get required parameters
         try:
-            self.bucket_name = s3_params["bucket_name"]
+            self.bucket_name = f"{s3_params['bucket_name']}-{environment}"
             self.repository = storage_params["repository"]
             self.repository_id = storage_params["repository_id"]
 

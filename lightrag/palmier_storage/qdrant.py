@@ -1,0 +1,277 @@
+import asyncio
+from dataclasses import dataclass
+import logging
+import os
+from typing import Optional
+import hashlib
+
+import numpy as np
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
+from qdrant_client.http.exceptions import UnexpectedResponse
+
+from ..base import BaseVectorStorage
+from ..utils import compute_mdhash_id, logger
+
+@dataclass
+class QdrantStorage(BaseVectorStorage):
+    """Qdrant vector storage implementation with multi-tenancy support."""
+    
+    def __post_init__(self):
+        self.environment = self.global_config.get("environment", "dev")
+        self._collection_name = f"lightrag_{self.namespace}_{self.environment}"
+        self._max_batch_size = self.global_config.get("embedding_batch_num", 32)
+
+        url = os.getenv("QDRANT_URL")
+        api_key = os.getenv("QDRANT_API_KEY")
+
+        if not url or not api_key:
+            raise ValueError("QDRANT_URL and QDRANT_API_KEY must be set")
+        
+        storage_params = self.global_config.get("storage_params")
+        if not storage_params:
+            raise ValueError("storage_params must be provided in global_config")
+        
+        # Initialize Qdrant client
+        try:
+            self._client = QdrantClient(
+                url=url,
+                api_key=api_key,
+            )
+            self.repository = storage_params.get("repository")
+            self.repository_id = storage_params.get("repository_id")
+            
+            # Create collection if it doesn't exist
+            try:
+                self._client.get_collection(self._collection_name)
+                logger.info(f"Connected to existing Qdrant collection {self._collection_name}")
+            except (UnexpectedResponse, ValueError):
+                self._client.create_collection(
+                    collection_name=self._collection_name,
+                    vectors_config=models.VectorParams(
+                        size=self.embedding_func.embedding_dim,
+                        distance=models.Distance.COSINE,
+                    )
+                )
+                self._client.create_payload_index(
+                    collection_name=self._collection_name,
+                    field_name="repository_id",
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                )
+                logger.info(f"Created new Qdrant collection {self._collection_name}")
+        except Exception as e:
+            logger.error(f"Failed to initialize Qdrant client: {e}")
+            raise
+
+    def _get_qdrant_id(self, string_id: str) -> int:
+        """Convert string ID to integer for Qdrant.
+        Creates a deterministic integer based on the string ID and repository_id.
+        """
+        # Create a deterministic hash combining repository_id and string_id
+        hash_input = f"{self.repository_id}:{string_id}"
+        # Use last 16 digits of hash for the integer (to avoid overflow)
+        hash_hex = hashlib.md5(hash_input.encode()).hexdigest()[-16:]
+        return int(hash_hex, 16)
+
+    async def upsert(self, data: dict[str, dict]):
+        """Insert or update vectors in Qdrant with repository_id."""
+        logger.info(f"Inserting {len(data)} vectors to {self.namespace} for repository {self.repository_id}")
+        if not data:
+            logger.warning("Attempting to insert empty data to vector DB")
+            return []
+
+        results = []
+        batch_data = []
+        batch_ids = []
+        batch_contents = []
+
+        try:
+            for doc_id, doc in data.items():
+                batch_ids.append(doc_id)
+                # Add repository_id to payload
+                payload = {
+                    k: v for k, v in doc.items() 
+                    if k in self.meta_fields or k == "content"
+                }
+                payload["repository_id"] = self.repository_id
+                batch_data.append(payload)
+                batch_contents.append(doc["content"])
+
+                if len(batch_contents) >= self._max_batch_size:
+                    await self._process_batch(batch_ids, batch_contents, batch_data, results)
+                    batch_data, batch_ids, batch_contents = [], [], []
+
+            # Process remaining items
+            if batch_contents:
+                await self._process_batch(batch_ids, batch_contents, batch_data, results)
+
+            return results
+        except Exception as e:
+            logger.error(f"Error during upsert operation: {e}")
+            raise
+
+    async def _process_batch(self, batch_ids, batch_contents, batch_data, results):
+        """Process a batch of vectors for insertion."""
+        embeddings = await self.embedding_func(batch_contents)
+        points = [
+            models.PointStruct(
+                id=self._get_qdrant_id(id),  # Calculate integer ID on the fly
+                vector=embedding.tolist(),
+                payload={
+                    **payload,
+                    "original_id": id  # Store original ID in payload
+                }
+            )
+            for id, embedding, payload in zip(batch_ids, embeddings, batch_data)
+        ]
+        
+        self._client.upsert(
+            collection_name=self._collection_name,
+            points=points
+        )
+        results.extend(points)
+
+    async def query(self, query: str, top_k: int = 5) -> list[dict]:
+        """Query vectors from Qdrant within the same repository."""
+        try:
+            embedding = await self.embedding_func([query])
+            
+            # Add repository filter to query
+            repository_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="repository_id",
+                        match=models.MatchValue(value=self.repository_id)
+                    )
+                ]
+            )
+            
+            results = self._client.search(
+                collection_name=self._collection_name,
+                query_vector=embedding[0].tolist(),
+                limit=top_k,
+                score_threshold=self.global_config.get("cosine_better_than_threshold", 0.2),
+                query_filter=repository_filter
+            )
+            
+            return [{
+                **hit.payload,
+                "id": hit.id,
+                "distance": hit.score
+            } for hit in results]
+        except Exception as e:
+            logger.error(f"Error during query operation: {e}")
+            raise
+
+    async def delete_by_ids(self, ids: list[str]):
+        """Delete vectors by their IDs within the same repository."""
+        try:
+            # Convert string IDs to Qdrant integer IDs
+            qdrant_ids = [self._get_qdrant_id(id) for id in ids]
+            
+            # First verify these IDs belong to the current repository
+            points = self._client.retrieve(
+                collection_name=self._collection_name,
+                ids=qdrant_ids
+            )
+            
+            # Filter points that belong to this repository
+            valid_ids = [
+                point.id for point in points 
+                if point.payload.get("repository_id") == self.repository_id
+            ]
+            
+            if valid_ids:
+                self._client.delete(
+                    collection_name=self._collection_name,
+                    points_selector=valid_ids
+                )
+                logger.debug(f"Deleted {len(valid_ids)} points from collection {self._collection_name}")
+            else:
+                logger.warning(f"No valid points found for deletion in repository {self.repository_id}")
+        except Exception as e:
+            logger.error(f"Error during delete operation: {e}")
+            raise
+
+    async def delete_entity(self, entity_name: str):
+        """Delete an entity and its associated vectors within the same repository."""
+        try:
+            entity_id = compute_mdhash_id(entity_name, prefix="ent-")
+            qdrant_id = self._get_qdrant_id(entity_id)
+            
+            # Check if entity exists and belongs to current repository
+            search_result = self._client.retrieve(
+                collection_name=self._collection_name,
+                ids=[qdrant_id]
+            )
+            
+            if search_result and search_result[0].payload.get("repository_id") == self.repository_id:
+                await self.delete_by_ids([entity_id])
+                logger.info(f"Entity {entity_name} has been deleted from repository {self.repository_id}")
+            else:
+                logger.info(f"No entity found with name {entity_name} in repository {self.repository_id}")
+        except Exception as e:
+            logger.error(f"Error while deleting entity {entity_name}: {e}")
+
+    async def delete_relation(self, entity_name: str):
+        """Delete all relations associated with an entity within the same repository."""
+        try:
+            # Search for relations containing the entity within the same repository
+            results = self._client.scroll(
+                collection_name=self._collection_name,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="repository_id",
+                            match=models.MatchValue(value=self.repository_id)
+                        )
+                    ],
+                    should=[
+                        models.FieldCondition(
+                            key="src_id",
+                            match=models.MatchValue(value=entity_name)
+                        ),
+                        models.FieldCondition(
+                            key="tgt_id",
+                            match=models.MatchValue(value=entity_name)
+                        )
+                    ]
+                )
+            )
+            
+            if results[0]:  # If there are any results
+                ids_to_delete = [point.id for point in results[0]]
+                await self.delete_by_ids(ids_to_delete)
+                logger.info(f"Deleted {len(ids_to_delete)} relations related to entity {entity_name} in repository {self.repository_id}")
+            else:
+                logger.info(f"No relations found for entity {entity_name} in repository {self.repository_id}")
+        except Exception as e:
+            logger.error(f"Error while deleting relations for entity {entity_name}: {e}")
+
+    async def index_done_callback(self):
+        """Called when indexing is complete."""
+        # Qdrant handles persistence automatically
+        pass
+
+    async def drop(self):
+        """Delete all the points in this repository."""
+        try:
+            # Delete points only for the current repository
+            repository_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="repository_id",
+                        match=models.MatchValue(value=self.repository_id)
+                    )
+                ]
+            )
+            
+            self._client.delete(
+                collection_name=self._collection_name,
+                points_selector=models.FilterSelector(filter=repository_filter)
+            )
+            logger.info(f"Deleted all points for repository {self.repository_id} in collection {self._collection_name}")
+        except Exception as e:
+            logger.error(f"Error while dropping repository data: {e}")
+            raise
+        

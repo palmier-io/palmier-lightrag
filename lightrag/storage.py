@@ -209,6 +209,9 @@ class NanoVectorDBStorage(BaseVectorStorage):
     async def index_done_callback(self):
         self._client.save()
 
+    async def drop(self):
+        pass
+
 
 @dataclass
 class NetworkXStorage(BaseGraphStorage):

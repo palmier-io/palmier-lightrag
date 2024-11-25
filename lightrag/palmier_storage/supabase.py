@@ -15,6 +15,8 @@ class SupabaseChunksStorage(BaseKVStorage):
         if not supabase_url or not supabase_key:
             raise ValueError("SUPABASE_URL and SUPABASE_KEY environment variables must be set")
         
+        environment = self.global_config.get("environment", "dev")
+        
         # Get storage params, raising error if not present
         storage_params = self.global_config.get("storage_params")
         if not storage_params:
@@ -26,7 +28,7 @@ class SupabaseChunksStorage(BaseKVStorage):
         
         # Get required parameters, raising specific errors if any are missing
         try:
-            self.table_name = supabase_params["table_name"]
+            self.table_name = f"{supabase_params['table_name']}_{environment}"
             self.repo = storage_params["repository"]
             self.repo_id = storage_params["repository_id"]
         except KeyError as e:

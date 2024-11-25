@@ -58,6 +58,9 @@ class BaseVectorStorage(StorageNameSpace):
 
     async def delete_by_ids(self, ids: list[str]):
         raise NotImplementedError
+    
+    async def drop(self):
+        raise NotImplementedError
 
 
 @dataclass

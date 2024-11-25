@@ -43,7 +43,8 @@ from .storage import (
 
 from .palmier_storage import (
     SupabaseChunksStorage,
-    S3DocsStorage
+    S3DocsStorage,
+    QdrantStorage,
 )
 
 from .chunking.language_parsers import get_language_from_file
@@ -78,6 +79,8 @@ class LightRAG:
     working_dir: str = field(
         default_factory=lambda: f"./lightrag_cache_{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}"
     )
+
+    environment: str = field(default="dev")
 
     # storage
     vector_storage: str = field(default="NanoVectorDBStorage")
@@ -236,6 +239,7 @@ class LightRAG:
             # vector storage
             "NanoVectorDBStorage": NanoVectorDBStorage,
             "OracleVectorDBStorage": OracleVectorDBStorage,
+            "QdrantStorage": QdrantStorage,
             # graph storage
             "NetworkXStorage": NetworkXStorage,
             "Neo4JStorage": Neo4JStorage,
