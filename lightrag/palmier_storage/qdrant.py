@@ -14,10 +14,15 @@ from ..utils import compute_mdhash_id, logger
 class QdrantStorage(BaseVectorStorage):
     """Qdrant vector storage implementation with multi-tenancy support."""
 
+    cosine_better_than_threshold: float = 0.2
+
     def __post_init__(self):
         self.environment = self.global_config.get("environment", "dev")
         self._collection_name = f"lightrag_{self.namespace}_{self.environment}"
         self._max_batch_size = self.global_config.get("embedding_batch_num", 32)
+        self.cosine_better_than_threshold = self.global_config.get(
+            "cosine_better_than_threshold", self.cosine_better_than_threshold
+        )
 
         url = os.getenv("QDRANT_URL")
         api_key = os.getenv("QDRANT_API_KEY")
@@ -138,8 +143,6 @@ class QdrantStorage(BaseVectorStorage):
         """Query vectors from Qdrant within the same repository."""
         try:
             embedding = await self.embedding_func([query])
-
-            # Add repository filter to query
             repository_filter = models.Filter(
                 must=[
                     models.FieldCondition(
@@ -153,14 +156,13 @@ class QdrantStorage(BaseVectorStorage):
                 collection_name=self._collection_name,
                 query_vector=embedding[0].tolist(),
                 limit=top_k,
-                score_threshold=self.global_config.get(
-                    "cosine_better_than_threshold", 0.2
-                ),
-                query_filter=repository_filter,
+                score_threshold=self.cosine_better_than_threshold,
+                query_filter=repository_filter,  # Uncomment and use the filter
             )
 
             return [
-                {**hit.payload, "id": hit.id, "distance": hit.score} for hit in results
+                {**hit.payload, "id": hit.payload["original_id"], "distance": hit.score}
+                for hit in results
             ]
         except Exception as e:
             logger.error(f"Error during query operation: {e}")

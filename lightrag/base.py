@@ -170,3 +170,6 @@ class BaseGraphStorage(StorageNameSpace):
             List of edge dictionaries matching the criteria
         """
         raise NotImplementedError
+
+    async def drop(self):
+        raise NotImplementedError

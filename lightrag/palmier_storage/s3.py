@@ -133,14 +133,13 @@ class S3DocsStorage(BaseKVStorage):
         """Delete all items in the namespace"""
         try:
             paginator = self.s3_client.get_paginator("list_objects_v2")
-            async for page in paginator.paginate(
-                Bucket=self.bucket_name, Prefix=self.prefix
-            ):
+            for page in paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix):
                 if "Contents" in page:
                     objects = [{"Key": obj["Key"]} for obj in page["Contents"]]
-                    self.s3_client.delete_objects(
-                        Bucket=self.bucket_name, Delete={"Objects": objects}
-                    )
+                    if objects:
+                        self.s3_client.delete_objects(
+                            Bucket=self.bucket_name, Delete={"Objects": objects}
+                        )
         except Exception as e:
             logger.error(f"Error dropping S3 storage: {e}")
 

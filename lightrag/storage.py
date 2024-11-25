@@ -421,3 +421,8 @@ class NetworkXStorage(BaseGraphStorage):
                 if prop_value in search_values:
                     matching_edges.append({**data, "source": source, "target": target})
         return matching_edges
+
+    async def drop(self):
+        self._graph = nx.Graph()
+        if os.path.exists(self._graphml_xml_file):
+            os.remove(self._graphml_xml_file)

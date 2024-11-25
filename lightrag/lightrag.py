@@ -589,3 +589,31 @@ class LightRAG:
                 continue
             tasks.append(cast(StorageNameSpace, storage_inst).index_done_callback())
         await asyncio.gather(*tasks)
+
+    def drop(self):
+        loop = always_get_an_event_loop()
+        return loop.run_until_complete(self.adrop())
+
+    async def adrop(self):
+        # TODO: drop all the storage
+        try:
+            logger.info("Dropping Graph Storage...")
+            await self.chunk_entity_relation_graph.drop()
+
+            logger.info("Dropping Entities Vector Storage...")
+            await self.entities_vdb.drop()
+
+            logger.info("Dropping Relationships Vector Storage...")
+            await self.relationships_vdb.drop()
+
+            logger.info("Dropping Chunks Vector Storage...")
+            await self.chunks_vdb.drop()
+
+            logger.info("Dropping Text Chunks Storage...")
+            await self.text_chunks.drop()
+
+            logger.info("Dropping Full Docs Storage...")
+            await self.full_docs.drop()
+
+        except Exception as e:
+            logger.error(f"Error while dropping storage: {e}")
