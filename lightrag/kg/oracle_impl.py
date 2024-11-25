@@ -309,9 +309,10 @@ class OracleVectorDBStorage(BaseVectorStorage):
         results = await self.db.query(SQL, multirows=True)
         # print("vector search result:",results)
         return results
-    
+
     async def drop(self):
         pass
+
 
 @dataclass
 class OracleGraphStorage(BaseGraphStorage):

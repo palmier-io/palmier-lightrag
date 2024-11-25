@@ -29,8 +29,6 @@ from .utils import (
 )
 from .base import (
     BaseGraphStorage,
-    BaseKVStorage,
-    BaseVectorStorage,
     StorageNameSpace,
     QueryParam,
 )
@@ -149,7 +147,7 @@ class LightRAG:
 
         # Initialize storage classes with parameters from storage_params
         storage_classes = self._get_storage_class()
-        
+
         # Helper function to get storage class with params
         def get_storage_with_params(storage_name: str) -> Type:
             storage_cls = storage_classes[storage_name]
@@ -159,7 +157,9 @@ class LightRAG:
         # Initialize all storage classes with their specific params
         self.docs_storage_cls = get_storage_with_params(self.docs_storage)
         self.chunks_storage_cls = get_storage_with_params(self.chunks_storage)
-        self.llm_response_cache_storage_cls = get_storage_with_params(self.llm_response_cache_storage)
+        self.llm_response_cache_storage_cls = get_storage_with_params(
+            self.llm_response_cache_storage
+        )
         self.vector_db_storage_cls = get_storage_with_params(self.vector_storage)
         self.graph_storage_cls = get_storage_with_params(self.graph_storage)
 

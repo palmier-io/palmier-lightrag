@@ -6,14 +6,16 @@ from typing import Union, Any
 from ..base import BaseKVStorage
 from ..utils import logger
 
+
 @dataclass
 class S3DocsStorage(BaseKVStorage):
     def __post_init__(self):
-
         aws_access_key_id = os.getenv("AWS_S3_ACCESS_KEY_ID")
         aws_secret_access_key = os.getenv("AWS_S3_SECRET_ACCESS_KEY")
         if not aws_access_key_id or not aws_secret_access_key:
-            raise ValueError("AWS_S3_ACCESS_KEY_ID and AWS_S3_SECRET_ACCESS_KEY must be set in environment variables")
+            raise ValueError(
+                "AWS_S3_ACCESS_KEY_ID and AWS_S3_SECRET_ACCESS_KEY must be set in environment variables"
+            )
 
         environment = self.global_config.get("environment", "dev")
 
@@ -21,11 +23,11 @@ class S3DocsStorage(BaseKVStorage):
         storage_params = self.global_config.get("storage_params")
         if not storage_params:
             raise ValueError("storage_params must be provided in global_config")
-            
+
         s3_params = storage_params.get("s3")
         if not s3_params:
             raise ValueError("s3 configuration must be provided in storage_params")
-        
+
         # Get required parameters
         try:
             self.bucket_name = f"{s3_params['bucket_name']}-{environment}"
@@ -39,10 +41,14 @@ class S3DocsStorage(BaseKVStorage):
             raise ValueError(f"Missing required parameter in s3 config: {e.args[0]}")
 
         self.prefix = f"{self.repository}/"
-        
+
         # Initialize S3 client with parameters
         try:
-            self.s3_client = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+            self.s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+            )
             # Ensure bucket exists
             self.s3_client.head_bucket(Bucket=self.bucket_name)
         except Exception as e:
@@ -52,11 +58,13 @@ class S3DocsStorage(BaseKVStorage):
     async def all_keys(self) -> list[str]:
         """List all keys in the storage"""
         try:
-            paginator = self.s3_client.get_paginator('list_objects_v2')
+            paginator = self.s3_client.get_paginator("list_objects_v2")
             keys = []
             for page in paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix):
-                if 'Contents' in page:
-                    keys.extend(obj['Key'].replace(self.prefix, '') for obj in page['Contents'])
+                if "Contents" in page:
+                    keys.extend(
+                        obj["Key"].replace(self.prefix, "") for obj in page["Contents"]
+                    )
             return keys
         except Exception as e:
             logger.error(f"Error listing keys from S3: {e}")
@@ -66,17 +74,18 @@ class S3DocsStorage(BaseKVStorage):
         """Get a single item by ID"""
         try:
             response = self.s3_client.get_object(
-                Bucket=self.bucket_name,
-                Key=f"{self.prefix}{id}"
+                Bucket=self.bucket_name, Key=f"{self.prefix}{id}"
             )
-            return json.loads(response['Body'].read().decode('utf-8'))
+            return json.loads(response["Body"].read().decode("utf-8"))
         except self.s3_client.exceptions.NoSuchKey:
             return None
         except Exception as e:
             logger.error(f"Error getting item {id} from S3: {e}")
             return None
 
-    async def get_by_ids(self, ids: list[str], fields: Union[set[str], None] = None) -> list[Union[Any, None]]:
+    async def get_by_ids(
+        self, ids: list[str], fields: Union[set[str], None] = None
+    ) -> list[Union[Any, None]]:
         """Get multiple items by IDs"""
         results = []
         for id in ids:
@@ -93,12 +102,12 @@ class S3DocsStorage(BaseKVStorage):
         all_keys = await self.all_keys()
         result = {}
         values_set = set(values)
-        
+
         for key in all_keys:
             item = await self.get_by_id(key)
             if item and item.get(field) in values_set:
                 result[key] = item
-                
+
         return result
 
     async def filter_keys(self, data: list[str]) -> set[str]:
@@ -113,8 +122,8 @@ class S3DocsStorage(BaseKVStorage):
                 self.s3_client.put_object(
                     Bucket=self.bucket_name,
                     Key=f"{self.prefix}{key}",
-                    Body=json.dumps(value).encode('utf-8'),
-                    ContentType='application/json'
+                    Body=json.dumps(value).encode("utf-8"),
+                    ContentType="application/json",
                 )
             except Exception as e:
                 logger.error(f"Error upserting item {key} to S3: {e}")
@@ -123,13 +132,14 @@ class S3DocsStorage(BaseKVStorage):
     async def drop(self):
         """Delete all items in the namespace"""
         try:
-            paginator = self.s3_client.get_paginator('list_objects_v2')
-            async for page in paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix):
-                if 'Contents' in page:
-                    objects = [{'Key': obj['Key']} for obj in page['Contents']]
+            paginator = self.s3_client.get_paginator("list_objects_v2")
+            async for page in paginator.paginate(
+                Bucket=self.bucket_name, Prefix=self.prefix
+            ):
+                if "Contents" in page:
+                    objects = [{"Key": obj["Key"]} for obj in page["Contents"]]
                     self.s3_client.delete_objects(
-                        Bucket=self.bucket_name,
-                        Delete={'Objects': objects}
+                        Bucket=self.bucket_name, Delete={"Objects": objects}
                     )
         except Exception as e:
             logger.error(f"Error dropping S3 storage: {e}")
@@ -137,10 +147,9 @@ class S3DocsStorage(BaseKVStorage):
     async def delete_by_ids(self, ids: list[str]):
         """Delete items by IDs"""
         try:
-            objects = [{'Key': f"{self.prefix}{id}"} for id in ids]
+            objects = [{"Key": f"{self.prefix}{id}"} for id in ids]
             self.s3_client.delete_objects(
-                Bucket=self.bucket_name,
-                Delete={'Objects': objects}
+                Bucket=self.bucket_name, Delete={"Objects": objects}
             )
         except Exception as e:
             logger.error(f"Error deleting items from S3: {e}")
