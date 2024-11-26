@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from functools import partial
 from typing import Type, cast
-
+import shutil
 from .llm import (
     gpt_4o_mini_complete,
     openai_embedding,
@@ -614,6 +614,10 @@ class LightRAG:
 
             logger.info("Dropping Full Docs Storage...")
             await self.full_docs.drop()
+
+            if os.path.exists(self.working_dir):
+                logger.info(f"Removing working directory {self.working_dir}...")
+                shutil.rmtree(self.working_dir)
 
         except Exception as e:
             logger.error(f"Error while dropping storage: {e}")
