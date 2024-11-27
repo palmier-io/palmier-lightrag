@@ -95,10 +95,10 @@ async def azure_openai_complete_if_cache(
     if api_key:
         os.environ["AZURE_OPENAI_API_KEY"] = api_key
     if base_url:
-        os.environ["AZURE_OPENAI_ENDPOINT"] = base_url
+        os.environ["AZURE_GPT_4O_MINI_ENDPOINT"] = base_url
 
     openai_async_client = AsyncAzureOpenAI(
-        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        azure_endpoint=os.getenv("AZURE_GPT_4O_MINI_ENDPOINT"),
         api_key=os.getenv("AZURE_OPENAI_API_KEY"),
         api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
     )
@@ -124,7 +124,7 @@ async def azure_openai_complete_if_cache(
         await hashing_kv.upsert(
             {args_hash: {"return": response.choices[0].message.content, "model": model}}
         )
-    return response.choices[0].message.content
+    return response.choices[0].message.content, response.usage
 
 @retry(
     stop=stop_after_attempt(3),
@@ -525,18 +525,31 @@ async def gpt_4o_complete(
 async def gpt_4o_mini_complete(
     prompt, system_prompt=None, history_messages=[], **kwargs
 ) -> str:
-    return await openai_complete_if_cache(
+    response = await openai_complete_if_cache(
         "gpt-4o-mini",
         prompt,
         system_prompt=system_prompt,
         history_messages=history_messages,
         **kwargs,
     )
+    
+    # Get usage data from response
+    usage = response.usage if hasattr(response, 'usage') else None
+    if usage:
+        return {
+            'content': response.choices[0].message.content,
+            'usage': {
+                'prompt_tokens': usage.prompt_tokens,
+                'completion_tokens': usage.completion_tokens,
+                'total_tokens': usage.total_tokens
+            }
+        }
+    return response
 
 
 async def azure_openai_complete(
     prompt, system_prompt=None, history_messages=[], **kwargs
-) -> str:
+) -> tuple[str, dict]:
     return await azure_openai_complete_if_cache(
         "conversation-4o-mini",
         prompt,
@@ -633,10 +646,10 @@ async def azure_openai_embedding(
     if api_key:
         os.environ["AZURE_OPENAI_API_KEY"] = api_key
     if base_url:
-        os.environ["AZURE_OPENAI_ENDPOINT"] = base_url
+        os.environ["AZURE_TEXT_EMBEDDING_3_SMALL_ENDPOINT"] = base_url
 
     openai_async_client = AsyncAzureOpenAI(
-        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        azure_endpoint=os.getenv("AZURE_TEXT_EMBEDDING_3_SMALL_ENDPOINT"),
         api_key=os.getenv("AZURE_OPENAI_API_KEY"),
         api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
     )
