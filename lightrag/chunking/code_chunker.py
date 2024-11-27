@@ -11,7 +11,7 @@ from .language_parsers import (
     SUPPORT_LANGUAGES,
     FILES_TO_IGNORE,
 )
-
+from ..prompt import PROMPTS
 
 class ChunkType(Enum):
     TREE_SITTER = "tree_sitter"
@@ -109,9 +109,8 @@ class CodeChunk:
             character=node_info.node.end_point[1],
             byte=node_info.node.end_byte,
         )
-        self.content = "\n".join(
-            code_str.split("\n")[self.start.line : self.end.line + 1]
-        )
+        content_lines = code_str.split("\n")[self.start.line : self.end.line + 1]
+        self.content = "\n".join(content_lines)
         self.token_count = len(self._encoding.encode(self.content))
 
     def set_index(self, index: int) -> None:
@@ -151,6 +150,8 @@ class CodeChunker:
         target_tokens=800,
         overlap_token_size=128,
         tiktoken_model="gpt-4o",
+        summary_enabled=False,
+        summary_model="gpt-4o-mini",
     ):
         # Local root directory of where the repo is downloaded to
         self.root_dir = root_dir
@@ -163,6 +164,9 @@ class CodeChunker:
 
         # Encoding to calculate token count
         self.encoding = tiktoken.encoding_for_model(tiktoken_model)
+
+        self.summary_enabled = summary_enabled
+        self.summary_model = summary_model
 
     def chunk_file(self, full_file_path: str) -> List[Dict[str, Any]]:
         """Given a full file path, return a list of chunks as dictionaries."""
@@ -195,7 +199,7 @@ class CodeChunker:
             )
             return []
 
-        return [chunk.to_dict() for chunk in chunks]
+        return [chunk.to_dict() for chunk in chunks if chunk.content.strip()]
 
     def _chunking_by_token_size(
         self, content: str, file_path: str, current_index: int = 0
@@ -401,7 +405,7 @@ def traverse_directory(root_dir: str) -> List[str]:
 
 # NOT USED
 def generate_file_summary(
-    code_str: str, file_path: str, model: str = "gpt-4o-mini"
+    file_bytes: bytes, file_path: str, model: str = "gpt-4o-mini"
 ) -> str:
     import openai
 
@@ -411,9 +415,9 @@ def generate_file_summary(
         messages=[
             {
                 "role": "system",
-                "content": f"Please provide a high-level summary of the given code content in file {file_path}. Include key concepts and functionalities, mentioning relevant classes and function names along with their purposes and interactions. Take into account the file path name for context. Keep the summary concise, using no more than 100 words, and format it as a single paragraph.",
+                "content": PROMPTS["file_summary"].format(file_path=file_path),
             },
-            {"role": "user", "content": code_str},
+            {"role": "user", "content": file_bytes.decode("utf-8", errors="ignore")},
         ],
     )
     return response.choices[0].message.content

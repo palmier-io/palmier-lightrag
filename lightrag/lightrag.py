@@ -95,6 +95,7 @@ class LightRAG:
     chunk_token_size: int = 800
     chunk_overlap_token_size: int = 100
     tiktoken_model_name: str = "gpt-4o-mini"
+    chunk_summary_enabled: bool = False
 
     # entity extraction
     entity_extract_max_gleaning: int = 1
@@ -261,6 +262,7 @@ class LightRAG:
                 target_tokens=self.chunk_token_size,
                 overlap_token_size=self.chunk_overlap_token_size,
                 tiktoken_model=self.tiktoken_model_name,
+                summary_enabled=self.chunk_summary_enabled,
             )
 
             # Create a new document for each file
@@ -282,6 +284,7 @@ class LightRAG:
             await self.full_docs.upsert(new_docs)
 
             # Chunking by either tree-sitter or token size
+            logger.info(f"[Chunking] chunking {len(new_docs)} docs")
             new_chunks = {}
             for doc_key, doc in new_docs.items():
                 chunks = {

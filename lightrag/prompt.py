@@ -8,144 +8,42 @@ PROMPTS["DEFAULT_COMPLETION_DELIMITER"] = "<|COMPLETE|>"
 PROMPTS["process_tickers"] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 PROMPTS["DEFAULT_ENTITY_TYPES"] = [
-    # Core Code Elements
-    "class",  # Class/type definitions
-    "function",  # Functions, procedures, methods
-    "variable",  # Variables, fields, properties
-    "constant",  # Constants, enums, readonly values
-    "interface",  # Interfaces, protocols, abstract classes
-    "type",  # Type definitions, generics
-    # Module Organization
-    "module",  # Source files
-    "package",  # Collections of modules
-    "import",  # Import/include statements
-    "namespace",  # Namespaces, modules
-    # Project Structure
-    "project",  # Project/solution root
-    "component",  # Logical components/features
-    "service",  # Services (micro/web/background)
-    "library",  # External/internal libraries
-    # Configuration
-    "config",  # Configuration files (json, yaml, etc.)
-    "env_var",  # Environment variables
-    "secret",  # Secrets, keys, credentials
-    "dependency",  # Project dependencies
-    # Build & Deploy
-    "pipeline",  # CI/CD pipelines
-    "workflow",  # Build/deployment workflows
-    "script",  # Build/automation scripts
-    "target",  # Build targets/artifacts
-    # Documentation
-    "doc",  # Documentation files
-    "api_doc",  # API documentation
-    "example",  # Example code/usage
-    "license",  # License information
-    # Testing
-    "test",  # Test files/suites
-    "mock",  # Mock objects/data
-    "fixture",  # Test fixtures/data
-    # Data
-    "schema",  # Data schemas/models
-    "migration",  # Database migrations
-    "dataset",  # Data files/sets
-    # Infrastructure
-    "container",  # Container definitions
-    "network",  # Network configurations
-    "resource",  # Cloud/infrastructure resources
-    # Version Control
-    "branch",  # Source control branches
-    "tag",  # Version tags/releases
-    "ignore",  # Ignore patterns
-    # Security
-    "policy",  # Security policies
-    "rule",  # Validation/security rules
-    "permission",  # Access permissions
-    # Monitoring
-    "metric",  # Metrics/measurements
-    "log",  # Logging configurations
-    "alert",  # Alert definitions
-    # UI/Frontend
-    "component_ui",  # UI components
-    "style",  # Style definitions
-    "asset",  # Media/static assets
-    # Architecture
-    "pattern",  # Design patterns
-    "contract",  # API contracts/interfaces
-    "gateway",  # API gateways/proxies
+    "function",
+    "class",
+    "method",
+    "variable",
+    "module",
+    "package",
+    "library",
+    "constant",
+    "interface",
 ]
 
 PROMPTS["entity_extraction"] = """-Goal-
-Perform a comprehensive analysis of a repository file or document to identify entities, their relationships, and their role in the larger system architecture.
+Given a code file or a text document that is potentially relevant to this activity and a list of entity types, identify all entities of those types from the code and all relationships among the identified entities.
 
--Instructions-
-Follow these steps for thorough analysis:
-
-1. Entity Identification
-For each entity, extract:
-- entity_name: Exact identifier from source
-- entity_type: Must be one of: [{entity_types}]
-- entity_description: Detailed description including:
-  * Primary purpose and responsibility
-  * Technical characteristics
-  * System context and scope
-  * Dependencies and requirements
-  * Impact on overall architecture
-  * Security implications (if any)
-  * Relationship to infrastructure/deployment (if relevant)
+-Steps-
+1. Identify all entities in the code file. For each identified entity, extract the following information:
+- entity_name: Name of the entity, as it appears in the code
+- entity_type: One of the following types: [{entity_types}]
+- entity_description: Comprehensive description of the entity's attributes, functionalities, and role within the code
 Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>
 
-2. Relationship Analysis
-For each meaningful connection between entities, identify:
+2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
+For each pair of related entities, extract the following information:
 - source_entity: name of the source entity, as identified in step 1
 - target_entity: name of the target entity, as identified in step 1
-- relationship_description: Comprehensive explanation including:
-  * Nature of interaction/dependency
-  * Flow direction and data/control transfer
-  * System impact and constraints
-  * Security considerations
-  * Infrastructure requirements
-  * Deployment implications
-- relationship_strength: Score (1-10) based on:
-  * Direct (8-10): Direct dependencies, inheritance, composition
-  * Indirect (4-7): Shared resources, configuration dependencies
-  * Architectural (1-3): System-level relationships
-- relationship_keywords: one or more multi-level key words that summarize the relationship. Examples:
-  * Primary: Core relationship type (e.g., "inherits", "configures")
-  * Technical: Implementation details (e.g., "async", "encrypted")
-  * Architectural: System patterns (e.g., "microservice", "pipeline")
+- relationship_description: explanation as to why you think the source entity and the target entity are related to each other(e.g., function calls another function, class inherits from another class)
+- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
+- relationship_keywords: one or more high-level key words that summarize the overarching nature of the relationship, focusing on concepts or themes rather than specific details (e.g., "function call", "inheritance", "dependency")
 Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
 
 3. Identify high-level key words that summarize the main concepts, functionalities, or topics of the entire text. These should capture the overarching ideas present in the document.
-Some examples:
-- Architectural patterns
-- Security implications
-- Infrastructure requirements
-- Development workflows
-- Operational considerations
 Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
 
-4. Output Guidelines
-- Separate entries with {record_delimiter}
-- End analysis with {completion_delimiter}
-- Maintain consistent detail level
-- Ensure traceability of relationships
+4. Return output in English as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
 
--Critical Considerations-
-* Analyze both code and non-code artifacts
-* Consider infrastructure and deployment impact
-* Include security and operational aspects
-* Identify cross-cutting concerns
-* Note system-level patterns
-* Document implicit dependencies
-* Consider configuration and environment requirements
-
--Analysis Hierarchy-
-1. Individual entity analysis
-2. Direct relationships
-3. Component-level connections
-4. System-level architecture
-5. Infrastructure implications
-6. Operational considerations
+5. When finished, output {completion_delimiter}
 
 ######################
 -Examples-
@@ -295,28 +193,14 @@ You are a helpful assistant tasked with identifying both high-level and low-leve
 
 ---Goal---
 
-Given the query, list both high-level and low-level keywords.
-High-level keywords should focus on overarching concepts or themes:
-- General concepts and themes
-- Design patterns and principles
-- System architectures
-- Problem domains
-- Technical paradigms
-
-Low-level keywords should focus on specific entities, details, or concrete terms:
-- Specific technologies
-- Implementation details
-- Concrete components
-- Technical terms
-- Specific operations
+Given the query, list both high-level and low-level keywords. High-level keywords focus on overarching concepts or themes, while low-level keywords focus on specific entities, details, or concrete terms.
 
 ---Instructions---
 
-Output the keywords in JSON format:
-{
-  "high_level_keywords": ["broader concepts"],
-  "low_level_keywords": ["specific details"]
-}
+- Output the keywords in JSON format.
+- The JSON should have two keys:
+  - "high_level_keywords" for overarching concepts or themes.
+  - "low_level_keywords" for specific entities or details.
 
 ######################
 -Examples-
@@ -379,4 +263,18 @@ Do not include information where the supporting evidence for it is not provided.
 {content_data}
 
 Add sections and commentary to the response as appropriate for the length and format. Style the response in markdown.
+"""
+
+PROMPTS["file_summary"] = """Analyze the given code content from {file_path} and provide a concise technical summary that:
+
+1. Identifies the primary purpose and role of this file in the codebase
+2. Lists key components (classes, functions, constants) and their core responsibilities
+3. Notes any important patterns, dependencies, or architectural decisions
+4. Considers the file's location/path for additional context about its role
+5. Highlights any configuration, constants, or shared resources defined
+
+Keep the summary focused and technical, around 25-50 words. Format as a single paragraph that emphasizes the file's role in the larger system.
+
+Example summary:
+"config/database.py defines the core database configuration and connection management. It exports the DatabaseConfig class for handling connection parameters and the ConnectionPool singleton for managing database connections. Includes retry logic and connection pooling settings through POOL_SIZE and MAX_RETRIES constants. Part of the application's data access layer, working alongside models/ and repositories/."
 """
