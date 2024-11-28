@@ -13,6 +13,7 @@ from .language_parsers import (
 )
 from ..prompt import PROMPTS
 
+
 class ChunkType(Enum):
     TREE_SITTER = "tree_sitter"
     TOKEN_SIZE = "token_size"

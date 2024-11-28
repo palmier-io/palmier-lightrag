@@ -328,6 +328,7 @@ class LightRAG:
                 await self.text_chunks.upsert(adding_chunks)
 
             logger.info("[Entity Extraction]...")
+            await self.chunk_entity_relation_graph.create_index()
             maybe_new_kg = await extract_entities(
                 adding_chunks,
                 knowledge_graph_inst=self.chunk_entity_relation_graph,

@@ -265,7 +265,9 @@ Do not include information where the supporting evidence for it is not provided.
 Add sections and commentary to the response as appropriate for the length and format. Style the response in markdown.
 """
 
-PROMPTS["file_summary"] = """Analyze the given code content from {file_path} and provide a concise technical summary that:
+PROMPTS[
+    "file_summary"
+] = """Analyze the given code content from {file_path} and provide a concise technical summary that:
 
 1. Identifies the primary purpose and role of this file in the codebase
 2. Lists key components (classes, functions, constants) and their core responsibilities
