@@ -88,6 +88,24 @@ class Neo4JStorage(BaseGraphStorage):
             await session.run(unique_node_query)
             await session.run(repository_id_index_query)
 
+    def db_retry_decorator():
+        """
+        Retry decorator for database operations.
+        """
+        return retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=4, max=10),
+            retry=retry_if_exception_type(
+                (
+                    neo4jExceptions.ServiceUnavailable,
+                    neo4jExceptions.TransientError,
+                    neo4jExceptions.WriteServiceUnavailable,
+                    neo4jExceptions.ClientError,
+                )
+            ),
+        )
+
+    @db_retry_decorator()
     async def has_node(self, node_id: str) -> bool:
         node_id = node_id.strip('"')
         query = f"""
@@ -101,6 +119,7 @@ class Neo4JStorage(BaseGraphStorage):
             single_result = await result.single()
             return single_result["node_exists"]
 
+    @db_retry_decorator()
     async def has_edge(self, source_node_id: str, target_node_id: str) -> bool:
         source_node_id = source_node_id.strip('"')
         target_node_id = target_node_id.strip('"')
@@ -123,26 +142,32 @@ class Neo4JStorage(BaseGraphStorage):
             )
             return single_result["edgeExists"]
 
+    @db_retry_decorator()
     async def get_node(self, node_id: str) -> Union[dict, None]:
         node_id = node_id.strip('"')
         query = f"""
             MATCH (n:{self.node_label} {{repository_id: $repository_id, node_id: $node_id}})
             RETURN n
         """
-        async with self._driver.session() as session:
-            result = await session.run(
-                query, repository_id=self.repository_id, node_id=node_id
-            )
-            record = await result.single()
-            if record:
-                node = record["n"]
-                node_dict = dict(node)
-                logger.debug(
-                    f"{inspect.currentframe().f_code.co_name}: query: {query}, result: {node_dict}"
+        try:
+            async with self._driver.session() as session:
+                result = await session.run(
+                    query, repository_id=self.repository_id, node_id=node_id
                 )
-                return node_dict
-            return None
+                record = await result.single()
+                if record:
+                    node = record["n"]
+                    node_dict = dict(node)
+                    logger.debug(
+                        f"{inspect.currentframe().f_code.co_name}: query: {query}, result: {node_dict}"
+                    )
+                    return node_dict
+                return None
+        except Exception as e:
+            logger.error(f"Error in get_node: {str(e)}")
+            raise
 
+    @db_retry_decorator()
     async def node_degree(self, node_id: str) -> int:
         node_id = node_id.strip('"')
         query = f"""
@@ -179,6 +204,7 @@ class Neo4JStorage(BaseGraphStorage):
         )
         return degrees
 
+    @db_retry_decorator()
     async def get_edge(
         self, source_node_id: str, target_node_id: str
     ) -> Union[dict, None]:
@@ -218,6 +244,7 @@ class Neo4JStorage(BaseGraphStorage):
             else:
                 return None
 
+    @db_retry_decorator()
     async def get_node_edges(self, source_node_id: str) -> List[Tuple[str, str]]:
         """
         Retrieves all edges (relationships) for a particular node identified by its node_id within the same repository.
@@ -250,17 +277,7 @@ class Neo4JStorage(BaseGraphStorage):
             )
             return edges
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(
-            (
-                neo4jExceptions.ServiceUnavailable,
-                neo4jExceptions.TransientError,
-                neo4jExceptions.WriteServiceUnavailable,
-            )
-        ),
-    )
+    @db_retry_decorator()
     async def upsert_node(self, node_id: str, node_data: Dict[str, Any]):
         """
         Upsert a node in the Neo4j database with repository isolation.
@@ -294,17 +311,7 @@ class Neo4JStorage(BaseGraphStorage):
             logger.error(f"Error during upsert: {str(e)}")
             raise
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(
-            (
-                neo4jExceptions.ServiceUnavailable,
-                neo4jExceptions.TransientError,
-                neo4jExceptions.WriteServiceUnavailable,
-            )
-        ),
-    )
+    @db_retry_decorator()
     async def upsert_edge(
         self, source_node_id: str, target_node_id: str, edge_data: Dict[str, Any]
     ):
@@ -350,6 +357,7 @@ class Neo4JStorage(BaseGraphStorage):
     async def _node2vec_embed(self):
         print("Implemented but never called.")
 
+    @db_retry_decorator()
     async def delete_node(self, node_id: str):
         try:
             node_id = node_id.strip('"')
@@ -366,6 +374,7 @@ class Neo4JStorage(BaseGraphStorage):
             logger.error(f"Error during node deletion: {str(e)}")
             raise
 
+    @db_retry_decorator()
     async def delete_edge(self, source_node_id: str, target_node_id: str):
         try:
             source_node_id = source_node_id.strip('"')
@@ -391,6 +400,7 @@ class Neo4JStorage(BaseGraphStorage):
             logger.error(f"Error during edge deletion: {str(e)}")
             raise
 
+    @db_retry_decorator()
     async def get_nodes_by_property(
         self, property_name: str, property_value: Any, split_by_sep: bool = False
     ) -> List[Dict]:
@@ -441,6 +451,7 @@ class Neo4JStorage(BaseGraphStorage):
             )
             return nodes
 
+    @db_retry_decorator()
     async def get_edges_by_property(
         self, property_name: str, property_value: Any, split_by_sep: bool = False
     ) -> List[Dict]:
@@ -495,6 +506,7 @@ class Neo4JStorage(BaseGraphStorage):
             )
             return edges
 
+    @db_retry_decorator()
     async def drop(self):
         """
         Deletes all nodes and edges associated with the current repository_id

@@ -41,7 +41,7 @@ class QdrantStorage(BaseVectorStorage):
                 api_key=api_key,
             )
             self.repository = storage_params.get("repository")
-            self.repository_id = storage_params.get("repository_id")
+            self.repository_id = str(storage_params.get("repository_id"))
 
             # Create collection if it doesn't exist
             try:
@@ -283,6 +283,12 @@ class QdrantStorage(BaseVectorStorage):
                     )
                 ]
             )
+
+            points = self._client.scroll(
+                collection_name=self._collection_name,
+                scroll_filter=repository_filter,
+            )
+            print(points)
 
             self._client.delete(
                 collection_name=self._collection_name,
