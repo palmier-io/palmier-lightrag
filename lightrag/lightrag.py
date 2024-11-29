@@ -43,6 +43,7 @@ from .palmier_storage import (
     SupabaseChunksStorage,
     S3DocsStorage,
     QdrantStorage,
+    NeptuneCypherStorage,
 )
 
 from .chunking.language_parsers import get_language_from_file
@@ -245,6 +246,7 @@ class LightRAG:
             "NetworkXStorage": NetworkXStorage,
             "Neo4JStorage": Neo4JStorage,
             "OracleGraphStorage": OracleGraphStorage,
+            "NeptuneCypherStorage": NeptuneCypherStorage,
             # "ArangoDBStorage": ArangoDBStorage
         }
 
