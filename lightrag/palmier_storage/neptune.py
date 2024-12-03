@@ -1,8 +1,6 @@
-import asyncio
 import os
 from dataclasses import dataclass
 from typing import Any, Union, Tuple, List, Dict
-import inspect
 import aiohttp
 from lightrag.utils import logger
 from ..base import BaseGraphStorage
@@ -14,6 +12,7 @@ from tenacity import (
     wait_exponential,
     retry_if_exception_type,
 )
+
 
 @dataclass
 class NeptuneCypherStorage(BaseGraphStorage):
@@ -64,7 +63,7 @@ class NeptuneCypherStorage(BaseGraphStorage):
             retry=retry_if_exception_type(
                 (
                     aiohttp.ClientError,
-                    Exception  # other exceptions can be added here
+                    Exception,  # other exceptions can be added here
                 )
             ),
         )
@@ -76,10 +75,10 @@ class NeptuneCypherStorage(BaseGraphStorage):
 
     async def _execute_cypher_query(self, query: str, params: Dict = None):
         url = self.neptune_url
-        headers = {'Content-Type': 'application/json'}
-        data = {'query': query}
+        headers = {"Content-Type": "application/json"}
+        data = {"query": query}
         if params:
-            data['parameters'] = params
+            data["parameters"] = params
 
         session = await self._get_session()
         async with session.post(url, json=data, headers=headers, ssl=False) as response:
@@ -97,10 +96,10 @@ class NeptuneCypherStorage(BaseGraphStorage):
             MATCH (n:{self.node_label} {{repository_id: $repository_id, node_id: $node_id}})
             RETURN COUNT(n) AS node_count
         """
-        params = {'repository_id': self.repository_id, 'node_id': node_id}
+        params = {"repository_id": self.repository_id, "node_id": node_id}
         try:
             result = await self._execute_cypher_query(query, params)
-            node_count = result['results'][0]['data'][0]['row'][0]
+            node_count = result["results"][0]["data"][0]["row"][0]
             return node_count > 0
         except Exception as e:
             logger.error(f"Error in has_node: {str(e)}")
@@ -117,13 +116,13 @@ class NeptuneCypherStorage(BaseGraphStorage):
             RETURN COUNT(r) AS edge_count
         """
         params = {
-            'repository_id': self.repository_id,
-            'source_node_id': source_node_id,
-            'target_node_id': target_node_id,
+            "repository_id": self.repository_id,
+            "source_node_id": source_node_id,
+            "target_node_id": target_node_id,
         }
         try:
             result = await self._execute_cypher_query(query, params)
-            edge_count = result['results'][0]['data'][0]['row'][0]
+            edge_count = result["results"][0]["data"][0]["row"][0]
             return edge_count > 0
         except Exception as e:
             logger.error(f"Error in has_edge: {str(e)}")
@@ -137,12 +136,12 @@ class NeptuneCypherStorage(BaseGraphStorage):
             RETURN n
             LIMIT 1
         """
-        params = {'repository_id': self.repository_id, 'node_id': node_id}
+        params = {"repository_id": self.repository_id, "node_id": node_id}
         try:
             result = await self._execute_cypher_query(query, params)
-            data = result['results'][0]['data']
+            data = result["results"][0]["data"]
             if data:
-                node_props = data[0]['row'][0]
+                node_props = data[0]["row"][0]
                 logger.debug(f"get_node: result: {node_props}")
                 return node_props
             return None
@@ -157,10 +156,10 @@ class NeptuneCypherStorage(BaseGraphStorage):
             MATCH (n:{self.node_label} {{repository_id: $repository_id, node_id: $node_id}})
             RETURN SIZE((n)--()) AS totalEdgeCount
         """
-        params = {'repository_id': self.repository_id, 'node_id': node_id}
+        params = {"repository_id": self.repository_id, "node_id": node_id}
         try:
             result = await self._execute_cypher_query(query, params)
-            edge_count = result['results'][0]['data'][0]['row'][0]
+            edge_count = result["results"][0]["data"][0]["row"][0]
             logger.debug(f"node_degree: result: {edge_count}")
             return edge_count
         except Exception as e:
@@ -194,15 +193,15 @@ class NeptuneCypherStorage(BaseGraphStorage):
             LIMIT 1
         """
         params = {
-            'repository_id': self.repository_id,
-            'source_node_id': source_node_id,
-            'target_node_id': target_node_id,
+            "repository_id": self.repository_id,
+            "source_node_id": source_node_id,
+            "target_node_id": target_node_id,
         }
         try:
             result = await self._execute_cypher_query(query, params)
-            data = result['results'][0]['data']
+            data = result["results"][0]["data"]
             if data:
-                edge_props = data[0]['row'][0]
+                edge_props = data[0]["row"][0]
                 logger.debug(f"get_edge: result: {edge_props}")
                 return edge_props
             return None
@@ -218,14 +217,14 @@ class NeptuneCypherStorage(BaseGraphStorage):
             -[r]->(connected:{self.node_label} {{repository_id: $repository_id}})
             RETURN n.node_id AS source_node_id, connected.node_id AS connected_node_id
         """
-        params = {'repository_id': self.repository_id, 'source_node_id': source_node_id}
+        params = {"repository_id": self.repository_id, "source_node_id": source_node_id}
         try:
             result = await self._execute_cypher_query(query, params)
-            data = result['results'][0]['data']
+            data = result["results"][0]["data"]
             edges = []
             for record in data:
-                source_id = record['row'][0]
-                connected_id = record['row'][1]
+                source_id = record["row"][0]
+                connected_id = record["row"][1]
                 if source_id and connected_id:
                     edges.append((source_id, connected_id))
             logger.debug(f"get_node_edges: result: {edges}")
@@ -244,7 +243,7 @@ class NeptuneCypherStorage(BaseGraphStorage):
         }
 
         # Build the Cypher MERGE query
-        props_str = ', '.join(f'{key}: ${key}' for key in properties.keys())
+        props_str = ", ".join(f"{key}: ${key}" for key in properties.keys())
         query = f"""
             MERGE (n:{self.node_label} {{node_id: $node_id, repository_id: $repository_id}})
             SET n += {{{props_str}}}
@@ -269,7 +268,7 @@ class NeptuneCypherStorage(BaseGraphStorage):
         edge_properties = {**edge_data, "repository_id": self.repository_id}
 
         # Build the Cypher MERGE query for edge
-        props_str = ', '.join(f'{key}: ${key}' for key in edge_properties.keys())
+        props_str = ", ".join(f"{key}: ${key}" for key in edge_properties.keys())
         query = f"""
             MATCH (source:{self.node_label} {{repository_id: $repository_id, node_id: $source_node_id}})
             MATCH (target:{self.node_label} {{repository_id: $repository_id, node_id: $target_node_id}})
@@ -277,9 +276,9 @@ class NeptuneCypherStorage(BaseGraphStorage):
             SET r += {{{props_str}}}
         """
         params = {
-            'repository_id': self.repository_id,
-            'source_node_id': source_node_id,
-            'target_node_id': target_node_id,
+            "repository_id": self.repository_id,
+            "source_node_id": source_node_id,
+            "target_node_id": target_node_id,
             **edge_properties,
         }
         try:
@@ -298,7 +297,7 @@ class NeptuneCypherStorage(BaseGraphStorage):
             MATCH (n:{self.node_label} {{repository_id: $repository_id, node_id: $node_id}})
             DETACH DELETE n
         """
-        params = {'repository_id': self.repository_id, 'node_id': node_id}
+        params = {"repository_id": self.repository_id, "node_id": node_id}
         try:
             await self._execute_cypher_query(query, params)
             logger.debug(f"Node {node_id} deleted from the graph.")
@@ -318,9 +317,9 @@ class NeptuneCypherStorage(BaseGraphStorage):
             DELETE r
         """
         params = {
-            'repository_id': self.repository_id,
-            'source_node_id': source_node_id,
-            'target_node_id': target_node_id,
+            "repository_id": self.repository_id,
+            "source_node_id": source_node_id,
+            "target_node_id": target_node_id,
         }
         try:
             await self._execute_cypher_query(query, params)
@@ -343,9 +342,9 @@ class NeptuneCypherStorage(BaseGraphStorage):
                 RETURN n
             """
             params = {
-                'repository_id': self.repository_id,
-                'property_value': property_value,
-                'sep': GRAPH_FIELD_SEP,
+                "repository_id": self.repository_id,
+                "property_value": property_value,
+                "sep": GRAPH_FIELD_SEP,
             }
         else:
             query = f"""
@@ -354,13 +353,13 @@ class NeptuneCypherStorage(BaseGraphStorage):
                 RETURN n
             """
             params = {
-                'repository_id': self.repository_id,
-                'property_value': property_value,
+                "repository_id": self.repository_id,
+                "property_value": property_value,
             }
         try:
             result = await self._execute_cypher_query(query, params)
-            data = result['results'][0]['data']
-            nodes = [record['row'][0] for record in data]
+            data = result["results"][0]["data"]
+            nodes = [record["row"][0] for record in data]
             logger.debug(f"get_nodes_by_property: result: {nodes}")
             return nodes
         except Exception as e:
@@ -380,9 +379,9 @@ class NeptuneCypherStorage(BaseGraphStorage):
                 RETURN r
             """
             params = {
-                'repository_id': self.repository_id,
-                'property_value': property_value,
-                'sep': GRAPH_FIELD_SEP,
+                "repository_id": self.repository_id,
+                "property_value": property_value,
+                "sep": GRAPH_FIELD_SEP,
             }
         else:
             query = f"""
@@ -391,13 +390,13 @@ class NeptuneCypherStorage(BaseGraphStorage):
                 RETURN r
             """
             params = {
-                'repository_id': self.repository_id,
-                'property_value': property_value,
+                "repository_id": self.repository_id,
+                "property_value": property_value,
             }
         try:
             result = await self._execute_cypher_query(query, params)
-            data = result['results'][0]['data']
-            edges = [record['row'][0] for record in data]
+            data = result["results"][0]["data"]
+            edges = [record["row"][0] for record in data]
             logger.debug(f"get_edges_by_property: result: {edges}")
             return edges
         except Exception as e:
@@ -410,7 +409,7 @@ class NeptuneCypherStorage(BaseGraphStorage):
             MATCH (n:{self.node_label} {{repository_id: $repository_id}})
             DETACH DELETE n
         """
-        params = {'repository_id': self.repository_id}
+        params = {"repository_id": self.repository_id}
         try:
             await self._execute_cypher_query(query, params)
             logger.info(
