@@ -303,19 +303,19 @@ class Neo4JStorage(BaseGraphStorage):
                 
             async with self._driver.session() as session:
                 results = await session.run(
-                query, repository_id=self.repository_id, source_node_id=source_node_id
-            )
-            edges = []
-            async for record in results:
-                source_node_id = record["source_node_id"]
-                connected_node_id = record["connected_node_id"]
-                if source_node_id and connected_node_id:
-                    edges.append((source_node_id, connected_node_id))
-
-            logger.debug(
-                f"{inspect.currentframe().f_code.co_name}:query:{query}:result:{edges}"
+                    query, repository_id=self.repository_id, source_node_id=source_node_id
                 )
-            return edges
+                edges = []
+                async for record in results:
+                    source_node_id = record["source_node_id"]
+                    connected_node_id = record["connected_node_id"]
+                    if source_node_id and connected_node_id:
+                        edges.append((source_node_id, connected_node_id))
+
+                logger.debug(
+                    f"{inspect.currentframe().f_code.co_name}:query:{query}:result:{edges}"
+                )
+                return edges
         except Exception as e:
             logger.error(f"Error in get_node_edges: {str(e)}")
             raise
