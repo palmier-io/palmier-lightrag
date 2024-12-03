@@ -126,6 +126,7 @@ async def azure_openai_complete_if_cache(
         )
     return response.choices[0].message.content
 
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=4, max=10),
@@ -149,7 +150,7 @@ async def anthropic_complete_if_cache(
         messages.append({"role": "system", "content": system_prompt})
     messages.extend(history_messages)
     messages.append({"role": "user", "content": prompt})
-    
+
     if hashing_kv is not None:
         args_hash = compute_args_hash(model, messages)
         if_cache_return = await hashing_kv.get_by_id(args_hash)
@@ -163,16 +164,18 @@ async def anthropic_complete_if_cache(
             # Anthropic doesn't support system messages directly, prepend to first user message
             continue
         anthropic_messages.append({"role": msg["role"], "content": msg["content"]})
-    
+
     if system_prompt:
         if anthropic_messages and anthropic_messages[0]["role"] == "user":
-            anthropic_messages[0]["content"] = f"{system_prompt}\n\n{anthropic_messages[0]['content']}"
+            anthropic_messages[0]["content"] = (
+                f"{system_prompt}\n\n{anthropic_messages[0]['content']}"
+            )
 
     response = await anthropic_client.messages.create(
         model=model,
         messages=anthropic_messages,
         max_tokens=kwargs.pop("max_tokens", 8192),
-        **kwargs
+        **kwargs,
     )
 
     if hashing_kv is not None:
@@ -180,6 +183,7 @@ async def anthropic_complete_if_cache(
             {args_hash: {"return": response.content[0].text, "model": model}}
         )
     return response.content[0].text
+
 
 class BedrockError(Exception):
     """Generic error for issues related to Amazon Bedrock"""
@@ -545,6 +549,7 @@ async def azure_openai_complete(
         **kwargs,
     )
 
+
 async def anthropic_complete(
     prompt, system_prompt=None, history_messages=[], **kwargs
 ) -> str:
@@ -555,6 +560,7 @@ async def anthropic_complete(
         history_messages=history_messages,
         **kwargs,
     )
+
 
 async def bedrock_complete(
     prompt, system_prompt=None, history_messages=[], **kwargs

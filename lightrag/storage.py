@@ -209,6 +209,9 @@ class NanoVectorDBStorage(BaseVectorStorage):
     async def index_done_callback(self):
         self._client.save()
 
+    async def drop(self):
+        pass
+
 
 @dataclass
 class NetworkXStorage(BaseGraphStorage):
@@ -418,3 +421,12 @@ class NetworkXStorage(BaseGraphStorage):
                 if prop_value in search_values:
                     matching_edges.append({**data, "source": source, "target": target})
         return matching_edges
+
+    async def drop(self):
+        logger.info("Resetting NetworkX Graph Storage in memory...")
+        self._graph = nx.Graph()
+        if os.path.exists(self._graphml_xml_file):
+            logger.info(
+                f"Removing NetworkX Graph Storage file {self._graphml_xml_file}..."
+            )
+            os.remove(self._graphml_xml_file)

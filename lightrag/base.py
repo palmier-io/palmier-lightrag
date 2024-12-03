@@ -59,6 +59,9 @@ class BaseVectorStorage(StorageNameSpace):
     async def delete_by_ids(self, ids: list[str]):
         raise NotImplementedError
 
+    async def drop(self):
+        raise NotImplementedError
+
 
 @dataclass
 class BaseKVStorage(Generic[T], StorageNameSpace):
@@ -166,4 +169,7 @@ class BaseGraphStorage(StorageNameSpace):
         Returns:
             List of edge dictionaries matching the criteria
         """
+        raise NotImplementedError
+
+    async def drop(self):
         raise NotImplementedError

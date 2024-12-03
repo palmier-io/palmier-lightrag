@@ -310,6 +310,9 @@ class OracleVectorDBStorage(BaseVectorStorage):
         # print("vector search result:",results)
         return results
 
+    async def drop(self):
+        pass
+
 
 @dataclass
 class OracleGraphStorage(BaseGraphStorage):
