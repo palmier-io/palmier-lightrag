@@ -290,6 +290,9 @@ class NetworkXStorage(BaseGraphStorage):
             "node2vec": self._node2vec_embed,
         }
 
+    async def create_index(self):
+        pass
+
     async def index_done_callback(self):
         NetworkXStorage.write_nx_graph(self._graph, self._graphml_xml_file)
 
