@@ -46,7 +46,7 @@ class Neo4JStorage(BaseGraphStorage):
             raise ValueError("storage parameter is required in global config")
 
         self.repository = storage_param.get("repository")
-        self.repository_id = storage_param.get("repository_id")
+        self.repository_id = str(storage_param.get("repository_id"))
         if not self.repository or not self.repository_id:
             raise ValueError(
                 "repository and repository_id are required in storage parameter"
