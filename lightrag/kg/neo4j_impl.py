@@ -55,10 +55,6 @@ class Neo4JStorage(BaseGraphStorage):
             )
         return None
 
-    async def _get_session(self):
-        """Helper method to get a session tied to the current event loop"""
-        return self._driver.session()
-
     def __post_init__(self):
         self._node_embed_algorithms = {
             "node2vec": self._node2vec_embed,
@@ -90,7 +86,7 @@ class Neo4JStorage(BaseGraphStorage):
             ON (n.repository_id)
         """
 
-        async with await self._get_session() as session:
+        async with self._driver.session() as session:
             await session.run(unique_node_query)
             await session.run(repository_id_index_query)
 
@@ -119,7 +115,7 @@ class Neo4JStorage(BaseGraphStorage):
                 MATCH (n:{self.node_label} {{repository_id: $repository_id, node_id: $node_id}})
                 RETURN count(n) > 0 AS node_exists
             """
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 result = await session.run(
                     query, repository_id=self.repository_id, node_id=node_id
                 )
@@ -140,7 +136,7 @@ class Neo4JStorage(BaseGraphStorage):
                     (b:{self.node_label} {{repository_id: $repository_id, node_id: $target_node_id}})
                 RETURN COUNT(r) > 0 AS edgeExists
             """
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 result = await session.run(
                     query,
                     repository_id=self.repository_id,
@@ -161,7 +157,7 @@ class Neo4JStorage(BaseGraphStorage):
             RETURN n
         """
         try:
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 result = await session.run(
                     query, repository_id=self.repository_id, node_id=node_id
                 )
@@ -186,7 +182,7 @@ class Neo4JStorage(BaseGraphStorage):
             RETURN COUNT{{ (n)--() }} AS totalEdgeCount
         """
         try:
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 result = await session.run(
                     query, repository_id=self.repository_id, node_id=node_id
                 )
@@ -243,7 +239,7 @@ class Neo4JStorage(BaseGraphStorage):
             LIMIT 1
         """
         try:
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 result = await session.run(
                     query,
                     repository_id=self.repository_id,
@@ -281,7 +277,7 @@ class Neo4JStorage(BaseGraphStorage):
             RETURN n.node_id AS source_node_id, connected.node_id AS connected_node_id
         """
         try:
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 results = await session.run(
                     query, repository_id=self.repository_id, source_node_id=source_node_id
                 )
@@ -324,7 +320,7 @@ class Neo4JStorage(BaseGraphStorage):
                     repository_id=self.repository_id,
                     properties=properties,
                 )
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 await session.execute_write(_do_upsert)
         except Exception as e:
             logger.error(f"Error during upsert: {str(e)}")
@@ -363,7 +359,7 @@ class Neo4JStorage(BaseGraphStorage):
                     target_node_id=target_node_id,
                     properties=edge_properties,
                 )
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 await session.execute_write(_do_upsert_edge)
         except Exception as e:
             logger.error(f"Error during edge upsert: {str(e)}")
@@ -376,7 +372,7 @@ class Neo4JStorage(BaseGraphStorage):
     async def delete_node(self, node_id: str):
         try:
             node_id = node_id.strip('"')
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 query = f"""
                     MATCH (n:{self.node_label} {{repository_id: $repository_id, node_id: $node_id}})
                     DETACH DELETE n
@@ -395,7 +391,7 @@ class Neo4JStorage(BaseGraphStorage):
             source_node_id = source_node_id.strip('"')
             target_node_id = target_node_id.strip('"')
             relationship_type = "DIRECTED"
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 query = f"""
                     MATCH (source:{self.node_label} {{repository_id: $repository_id, node_id: $source_node_id}})
                         -[r:{relationship_type} {{repository_id: $repository_id}}]->
@@ -431,7 +427,7 @@ class Neo4JStorage(BaseGraphStorage):
             List[Dict]: List of node dictionaries matching the criteria
         """
         try:
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 if split_by_sep:
                     query = f"""
                         MATCH (n:{self.node_label} {{repository_id: $repository_id}})
@@ -486,7 +482,7 @@ class Neo4JStorage(BaseGraphStorage):
             List[Dict]: List of edge dictionaries matching the criteria
         """
         try:
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 if split_by_sep:
                     # Use SPLIT and ANY for GRAPH_FIELD_SEP separated values
                     query = """
@@ -537,7 +533,7 @@ class Neo4JStorage(BaseGraphStorage):
         """
         try:
             # Step 1: Delete all nodes and relationships for the current repository_id
-            async with await self._get_session() as session:
+            async with self._driver.session() as session:
                 query = f"""
                     MATCH (n:{self.node_label} {{repository_id: $repository_id}})
                     DETACH DELETE n
