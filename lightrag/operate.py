@@ -602,9 +602,9 @@ async def _build_local_query_context(
         )
     relations_context = list_of_list_to_csv(relations_section_list)
 
-    text_units_section_list = [["id", "content"]]
+    text_units_section_list = [["id", "content", "file_path"]]
     for i, t in enumerate(use_text_units):
-        text_units_section_list.append([i, t["content"]])
+        text_units_section_list.append([i, t["content"], t["file_path"]])
     text_units_context = list_of_list_to_csv(text_units_section_list)
     return f"""
 -----Entities-----
@@ -891,9 +891,9 @@ async def _build_global_query_context(
         )
     entities_context = list_of_list_to_csv(entites_section_list)
 
-    text_units_section_list = [["id", "content"]]
+    text_units_section_list = [["id", "content", "file_path"]]
     for i, t in enumerate(use_text_units):
-        text_units_section_list.append([i, t["content"]])
+        text_units_section_list.append([i, t["content"], t["file_path"]])
     text_units_context = list_of_list_to_csv(text_units_section_list)
 
     return f"""
