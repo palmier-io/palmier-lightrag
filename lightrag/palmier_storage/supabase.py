@@ -63,6 +63,7 @@ class SupabaseChunksStorage(BaseKVStorage):
         row = response.data[0]
         return {
             "content": row["content"],
+            "file_path": row["file_path"],
             "full_doc_id": row["full_doc_id"],
             **(row["metadata"] or {}),
         }
@@ -82,6 +83,7 @@ class SupabaseChunksStorage(BaseKVStorage):
         for row in response.data:
             data = {
                 "content": row["content"],
+                "file_path": row["file_path"],
                 "full_doc_id": row["full_doc_id"],
                 **(row["metadata"] or {}),
             }
@@ -114,6 +116,7 @@ class SupabaseChunksStorage(BaseKVStorage):
             if field_value in values:
                 result[row["chunk_id"]] = {
                     "content": row["content"],
+                    "file_path": row["file_path"],
                     "full_doc_id": row["full_doc_id"],
                     **(row["metadata"] or {}),
                 }
