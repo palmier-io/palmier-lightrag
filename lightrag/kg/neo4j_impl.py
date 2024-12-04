@@ -38,13 +38,7 @@ class Neo4JStorage(BaseGraphStorage):
         USERNAME = os.environ["NEO4J_USERNAME"]
         PASSWORD = os.environ["NEO4J_PASSWORD"]
         
-        # Get the current event loop or create a new one
-        try:
-            self._loop = asyncio.get_running_loop()
-        except RuntimeError:
-            self._loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._loop)
-            
+        # Initialize driver without binding to a specific loop
         self._driver: AsyncDriver = AsyncGraphDatabase.driver(
             URI, auth=(USERNAME, PASSWORD)
         )
@@ -116,9 +110,6 @@ class Neo4JStorage(BaseGraphStorage):
     @db_retry_decorator()
     async def has_node(self, node_id: str) -> bool:
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             node_id = node_id.strip('"')
             query = f"""
                 MATCH (n:{self.node_label} {{repository_id: $repository_id, node_id: $node_id}})
@@ -137,9 +128,6 @@ class Neo4JStorage(BaseGraphStorage):
     @db_retry_decorator()
     async def has_edge(self, source_node_id: str, target_node_id: str) -> bool:
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             source_node_id = source_node_id.strip('"')
             target_node_id = target_node_id.strip('"')
             query = f"""
@@ -169,9 +157,6 @@ class Neo4JStorage(BaseGraphStorage):
             RETURN n
         """
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             async with self._driver.session() as session:
                 result = await session.run(
                     query, repository_id=self.repository_id, node_id=node_id
@@ -197,9 +182,6 @@ class Neo4JStorage(BaseGraphStorage):
             RETURN COUNT{{ (n)--() }} AS totalEdgeCount
         """
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-
             async with self._driver.session() as session:
                 result = await session.run(
                     query, repository_id=self.repository_id, node_id=node_id
@@ -257,9 +239,6 @@ class Neo4JStorage(BaseGraphStorage):
             LIMIT 1
         """
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             async with self._driver.session() as session:
                 result = await session.run(
                     query,
@@ -298,9 +277,6 @@ class Neo4JStorage(BaseGraphStorage):
             RETURN n.node_id AS source_node_id, connected.node_id AS connected_node_id
         """
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             async with self._driver.session() as session:
                 results = await session.run(
                     query, repository_id=self.repository_id, source_node_id=source_node_id
@@ -326,9 +302,6 @@ class Neo4JStorage(BaseGraphStorage):
         Upsert a node in the Neo4j database with repository isolation.
         """
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             node_id = node_id.strip('"')
             properties = {
                 **node_data,
@@ -366,9 +339,6 @@ class Neo4JStorage(BaseGraphStorage):
             edge_data (dict): Dictionary of properties to set on the edge
         """
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             relationship_type = "DIRECTED"
             source_node_id = source_node_id.strip('"')
             target_node_id = target_node_id.strip('"')
@@ -401,9 +371,6 @@ class Neo4JStorage(BaseGraphStorage):
     @db_retry_decorator()
     async def delete_node(self, node_id: str):
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             node_id = node_id.strip('"')
             async with self._driver.session() as session:
                 query = f"""
@@ -421,9 +388,6 @@ class Neo4JStorage(BaseGraphStorage):
     @db_retry_decorator()
     async def delete_edge(self, source_node_id: str, target_node_id: str):
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             source_node_id = source_node_id.strip('"')
             target_node_id = target_node_id.strip('"')
             relationship_type = "DIRECTED"
@@ -463,9 +427,6 @@ class Neo4JStorage(BaseGraphStorage):
             List[Dict]: List of node dictionaries matching the criteria
         """
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             async with self._driver.session() as session:
                 if split_by_sep:
                     query = f"""
@@ -521,9 +482,6 @@ class Neo4JStorage(BaseGraphStorage):
             List[Dict]: List of edge dictionaries matching the criteria
         """
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             async with self._driver.session() as session:
                 if split_by_sep:
                     # Use SPLIT and ANY for GRAPH_FIELD_SEP separated values
@@ -574,9 +532,6 @@ class Neo4JStorage(BaseGraphStorage):
         and closes the database connection.
         """
         try:
-            if asyncio.get_running_loop() != self._loop:
-                asyncio.set_event_loop(self._loop)
-                
             # Step 1: Delete all nodes and relationships for the current repository_id
             async with self._driver.session() as session:
                 query = f"""
