@@ -542,7 +542,7 @@ async def azure_openai_complete(
     prompt, system_prompt=None, history_messages=[], **kwargs
 ) -> str:
     return await azure_openai_complete_if_cache(
-        "conversation-4o-mini",
+        "gpt-4o-mini",
         prompt,
         system_prompt=system_prompt,
         history_messages=history_messages,
