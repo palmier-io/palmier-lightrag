@@ -270,7 +270,8 @@ class LightRAG:
             # Create a new document for each file
             new_docs = {}
             for file_path in file_paths:
-                with open(file_path, "r") as f:
+                full_file_path = os.path.join(directory, file_path)
+                with open(full_file_path, "r") as f:
                     content = f.read()
 
                 language = get_language_from_file(file_path)
