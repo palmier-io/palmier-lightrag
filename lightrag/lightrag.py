@@ -251,7 +251,13 @@ class LightRAG:
         }
 
     def insert_files(self, directory: str, file_paths: list[str]):
-        """Palmier Specific - inserting file(s) to the knowledge graph"""
+        """
+        Palmier Specific - inserting file(s) to the knowledge graph
+        
+        Input:
+        - directory: the directory where the github repository is downloaded to
+        - file_paths: a list of full file paths to insert
+        """
         loop = always_get_an_event_loop()
         return loop.run_until_complete(self.ainsert_files(directory, file_paths))
 
@@ -270,14 +276,14 @@ class LightRAG:
             # Create a new document for each file
             new_docs = {}
             for file_path in file_paths:
-                full_file_path = os.path.join(directory, file_path)
-                with open(full_file_path, "r") as f:
+                with open(file_path, "r") as f:
                     content = f.read()
 
                 language = get_language_from_file(file_path)
+                relative_file_path = file_path.replace(directory, "")
                 # use hash(file_path) as doc_id
-                new_docs[compute_mdhash_id(file_path.strip(), prefix="doc-")] = {
-                    "file_path": file_path,
+                new_docs[compute_mdhash_id(relative_file_path.strip(), prefix="doc-")] = {
+                    "file_path": relative_file_path,
                     "language": language,
                     "content": content.strip(),
                 }
@@ -369,6 +375,13 @@ class LightRAG:
                 await self._insert_done()
 
     def delete_files(self, directory: str, file_paths: list[str]):
+        """
+        Palmier Specific - deleting file(s) from the knowledge graph
+        
+        Input:
+        - directory: the directory where the github repository is downloaded to
+        - file_paths: a list of full file paths to delete
+        """
         loop = always_get_an_event_loop()
         return loop.run_until_complete(self.adelete_files(directory, file_paths))
 
