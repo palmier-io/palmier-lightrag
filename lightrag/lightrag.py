@@ -302,7 +302,7 @@ class LightRAG:
                         **dp,
                         "full_doc_id": doc_key,
                     }
-                    for dp in code_chunker.chunk_file(doc["file_path"])
+                    for dp in code_chunker.chunk_file(os.path.join(directory, doc["file_path"]))
                 }
                 new_chunks.update(chunks)
 
