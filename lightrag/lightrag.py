@@ -3,7 +3,7 @@ import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from functools import partial
-from typing import Type, cast
+from typing import Type, cast, Optional
 import shutil
 from .llm import (
     gpt_4o_mini_complete,
@@ -46,9 +46,13 @@ from .palmier_storage import (
     NeptuneCypherStorage,
 )
 
-from .chunking.language_parsers import get_language_from_file
-
-from .chunking.code_chunker import CodeChunker
+from .chunking import (
+    CodeChunker,
+    get_language_from_file,
+    traverse_directory,
+    FILES_TO_IGNORE,
+    SUPPORT_LANGUAGES,
+)
 
 from .kg.neo4j_impl import Neo4JStorage
 
@@ -250,18 +254,18 @@ class LightRAG:
             # "ArangoDBStorage": ArangoDBStorage
         }
 
-    def insert_files(self, directory: str, file_paths: list[str]):
+    def insert_files(self, directory: str, file_paths: Optional[list[str]] = None):
         """
         Palmier Specific - inserting file(s) to the knowledge graph
         
         Input:
         - directory: the directory where the github repository is downloaded to
-        - file_paths: a list of full file paths to insert
+        - file_paths [optional]: a list of full file paths to insert. If not provided, the function will traverse the directory and insert all files.
         """
         loop = always_get_an_event_loop()
         return loop.run_until_complete(self.ainsert_files(directory, file_paths))
 
-    async def ainsert_files(self, directory: str, file_paths: list[str]):
+    async def ainsert_files(self, directory: str, file_paths: Optional[list[str]] = None):
         """Palmier Specific - inserting file(s) to the knowledge graph"""
         update_storage = False
         try:
@@ -273,19 +277,31 @@ class LightRAG:
                 summary_enabled=self.chunk_summary_enabled,
             )
 
+            if file_paths is None:
+                logger.info(f"[Traversing] No file provided to ainsert_files, traversing {directory}")
+                file_paths = traverse_directory(directory)
+
             # Create a new document for each file
+            logger.info(f"[Filtering] processing {len(file_paths)} files at {directory}")
             new_docs = {}
-            for file_path in file_paths:
-                with open(file_path, "r") as f:
+            for full_file_path in file_paths:
+
+                # Filter out unwanted/unsupported files
+                if any(full_file_path.endswith(ext) for ext in FILES_TO_IGNORE):
+                    continue
+                language = get_language_from_file(full_file_path)
+                if language != "text only" and language not in SUPPORT_LANGUAGES:
+                    continue
+
+                with open(full_file_path, "r") as f:
                     content = f.read()
 
-                language = get_language_from_file(file_path)
-                relative_file_path = file_path.replace(directory, "")
+                relative_file_path = os.path.relpath(full_file_path, directory)
                 # use hash(file_path) as doc_id
                 new_docs[compute_mdhash_id(relative_file_path.strip(), prefix="doc-")] = {
                     "file_path": relative_file_path,
                     "language": language,
-                    "content": content.strip(),
+                    "content": content,
                 }
 
             update_storage = True
@@ -302,7 +318,7 @@ class LightRAG:
                         **dp,
                         "full_doc_id": doc_key,
                     }
-                    for dp in code_chunker.chunk_file(os.path.join(directory, doc["file_path"]))
+                    for dp in code_chunker.chunk_file(doc["file_path"], doc["content"])
                 }
                 new_chunks.update(chunks)
 
