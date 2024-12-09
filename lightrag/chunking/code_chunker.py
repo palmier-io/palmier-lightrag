@@ -171,7 +171,6 @@ class CodeChunker:
 
     def chunk_file(self, relative_file_path: str, content: str) -> List[Dict[str, Any]]:
         """Given a relative file path and content, return a list of chunks as dictionaries."""
-        logging.info(f"Chunking file {relative_file_path}")
         # Remove leading separator and split path
         relative_file_path = relative_file_path.lstrip(os.sep)
 
