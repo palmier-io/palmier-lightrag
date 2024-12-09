@@ -169,34 +169,27 @@ class CodeChunker:
         self.summary_enabled = summary_enabled
         self.summary_model = summary_model
 
-    def chunk_file(self, full_file_path: str) -> List[Dict[str, Any]]:
-        """Given a full file path, return a list of chunks as dictionaries."""
-
-        relative_file_path = full_file_path.replace(self.root_dir, "")
+    def chunk_file(self, relative_file_path: str, content: str) -> List[Dict[str, Any]]:
+        """Given a relative file path and content, return a list of chunks as dictionaries."""
         # Remove leading separator and split path
         relative_file_path = relative_file_path.lstrip(os.sep)
-        # Remove first folder from path - this is the zip folder name downloaded from GitHub
-        # relative_file_path = os.sep.join(relative_file_path.split(os.sep)[1:])
 
         if any(relative_file_path.endswith(ext) for ext in FILES_TO_IGNORE):
             logging.debug(f"Skipping file {relative_file_path}")
             return []
 
-        with open(full_file_path, "rb") as f:
-            content_bytes = f.read()
-
-        language_name = get_language_from_file(full_file_path)
+        language_name = get_language_from_file(relative_file_path)
 
         if language_name == "text only":
-            content = content_bytes.decode("utf-8", errors="ignore")
             chunks = self._chunking_by_token_size(content, relative_file_path)
         elif language_name in SUPPORT_LANGUAGES:
+            content_bytes = content.encode('utf-8')
             chunks = self._chunking_by_tree_sitter(
                 content_bytes, language_name, relative_file_path
             )
         else:
             logging.debug(
-                f"Skipping file {full_file_path} - Unsupported language: {language_name}"
+                f"Skipping file {relative_file_path} - Unsupported language: {language_name}"
             )
             return []
 
@@ -387,22 +380,13 @@ class CodeChunker:
 
 def traverse_directory(root_dir: str) -> List[str]:
     """
-    Walk the directory and return a list of full file paths. Ignore files that are not supported.
+    Walk the directory and return a list of full file paths, including all subdirectories.
     """
-
     file_list = []
     for root, dirs, files in os.walk(root_dir):
         for file in files:
-            if any(file.endswith(ext) for ext in FILES_TO_IGNORE):
-                continue
-
-            language_name = get_language_from_file(os.path.join(root, file))
-            if language_name != "text only" and language_name not in SUPPORT_LANGUAGES:
-                continue
-
             file_list.append(os.path.join(root, file))
     return file_list
-
 
 # NOT USED
 def generate_file_summary(
