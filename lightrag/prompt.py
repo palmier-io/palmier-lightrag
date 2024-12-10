@@ -2,6 +2,7 @@ GRAPH_FIELD_SEP = "<SEP>"
 
 PROMPTS = {}
 
+PROMPTS["DEFAULT_LANGUAGE"] = "English"
 PROMPTS["DEFAULT_TUPLE_DELIMITER"] = "<|>"
 PROMPTS["DEFAULT_RECORD_DELIMITER"] = "##"
 PROMPTS["DEFAULT_COMPLETION_DELIMITER"] = "<|COMPLETE|>"
@@ -41,14 +42,26 @@ Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tupl
 3. Identify high-level key words that summarize the main concepts, functionalities, or topics of the entire text. These should capture the overarching ideas present in the document.
 Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
 
-4. Return output in English as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
+4. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
 
 5. When finished, output {completion_delimiter}
 
 ######################
 -Examples-
 ######################
-Example 1:
+{examples}
+
+#############################
+-Real Data-
+######################
+Entity_types: {entity_types}
+Text: {input_text}
+######################
+Output:
+"""
+
+PROMPTS["entity_extraction_examples"] = [
+    """Example 1:
 
 Entity_types: [function, class, method, variable, module, package, library, constant, interface]
 Text:
@@ -87,8 +100,8 @@ Output:
 ("relationship"{tuple_delimiter}"divide"{tuple_delimiter}"ValueError"{tuple_delimiter}"The divide function raises a ValueError when attempting to divide by zero."{tuple_delimiter}"error handling, exception"{tuple_delimiter}8){record_delimiter}
 ("relationship"{tuple_delimiter}"multiply"{tuple_delimiter}"PI"{tuple_delimiter}"The multiply function could use PI for calculations involving circles."{tuple_delimiter}"mathematical operations, constants"{tuple_delimiter}5){record_delimiter}
 ("content_keywords"{tuple_delimiter}"arithmetic operations, calculator class, functions, constants, error handling"){completion_delimiter}
-######################
-Example 2:
+######################""",
+    """Example 2:
 
 Entity_types: [function, class, method, variable, module, package, library, constant, interface, component, system, process, requirement, specification, architecture, design pattern]
 Text:
@@ -128,14 +141,8 @@ Output:
 ("relationship"{tuple_delimiter}"OAuth2"{tuple_delimiter}"Authentication Module"{tuple_delimiter}"OAuth2 authentication process is implemented in the Authentication Module to enhance security."{tuple_delimiter}"implementation, security enhancement"{tuple_delimiter}8){record_delimiter}
 ("relationship"{tuple_delimiter}"authenticate"{tuple_delimiter}"AuthenticationError"{tuple_delimiter}"The authenticate method raises AuthenticationError when credentials are invalid."{tuple_delimiter}"error handling, exception raising"{tuple_delimiter}7){record_delimiter}
 ("content_keywords"{tuple_delimiter}"authentication, user management, security, OAuth2, system architecture, dependency injection"){completion_delimiter}
-#############################
--Real Data-
-######################
-Entity_types: {entity_types}
-Text: {input_text}
-######################
-Output:
-"""
+#############################""",
+]
 
 PROMPTS[
     "summarize_entity_descriptions"
@@ -144,6 +151,7 @@ Given one or two entities, and a list of descriptions, all related to the same e
 Please concatenate all of these into a single, comprehensive description. Make sure to include information collected from all the descriptions.
 If the provided descriptions are contradictory, please resolve the contradictions and provide a single, coherent summary.
 Make sure it is written in third person, and include the entity names so we the have full context.
+Use {language} as output language.
 
 #######
 -Data-
@@ -205,7 +213,20 @@ Given the query, list both high-level and low-level keywords. High-level keyword
 ######################
 -Examples-
 ######################
-Example 1:
+{examples}
+
+#############################
+-Real Data-
+######################
+Query: {query}
+######################
+The `Output` should be human text, not unicode characters. Keep the same language as `Query`.
+Output:
+
+"""
+
+PROMPTS["keywords_extraction_examples"] = [
+    """Example 1:
 
 Query: "How does the Observer design pattern facilitate decoupled communication between objects in software engineering?"
 ################
@@ -214,8 +235,8 @@ Output:
   "high_level_keywords": ["Observer design pattern", "Decoupled communication", "Software engineering"],
   "low_level_keywords": ["Subject", "Observer", "Event handling", "Publish-subscribe", "Design patterns"]
 }}
-#############################
-Example 2:
+#############################""",
+    """Example 2:
 
 Query: "What are the performance implications of using recursion versus iteration in algorithm implementation?"
 ################
@@ -224,8 +245,8 @@ Output:
   "high_level_keywords": ["Performance implications", "Recursion", "Iteration", "Algorithm implementation"],
   "low_level_keywords": ["Call stack", "Memory usage", "Loop constructs", "Tail recursion", "Execution time"]
 }}
-#############################
-Example 3:
+#############################""",
+    """Example 3:
 
 Query: "How does garbage collection work in managed programming languages like Java and C#?"
 ################
@@ -234,14 +255,9 @@ Output:
   "high_level_keywords": ["Garbage collection", "Managed programming languages", "Memory management"],
   "low_level_keywords": ["Java", "C#", "Heap allocation", "Automatic memory deallocation", "Garbage collector algorithms"]
 }}
-#############################
--Real Data-
-######################
-Query: {query}
-######################
-Output:
+#############################""",
+]
 
-"""
 
 PROMPTS["naive_rag_response"] = """---Role---
 
@@ -279,4 +295,21 @@ Keep the summary focused and technical, around 25-50 words. Format as a single p
 
 Example summary:
 "config/database.py defines the core database configuration and connection management. It exports the DatabaseConfig class for handling connection parameters and the ConnectionPool singleton for managing database connections. Includes retry logic and connection pooling settings through POOL_SIZE and MAX_RETRIES constants. Part of the application's data access layer, working alongside models/ and repositories/."
+"""
+
+PROMPTS["similarity_check"] = """Please analyze the similarity between these two questions:
+
+Question 1: {original_prompt}
+Question 2: {cached_prompt}
+
+Please evaluate:
+1. Whether these two questions are semantically similar
+2. Whether the answer to Question 2 can be used to answer Question 1
+
+Please provide a similarity score between 0 and 1, where:
+0: Completely unrelated or answer cannot be reused
+1: Identical and answer can be directly reused
+0.5: Partially related and answer needs modification to be used
+
+Return only a number between 0-1, without any additional content.
 """

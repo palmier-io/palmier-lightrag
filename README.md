@@ -8,13 +8,17 @@
         <a href='https://lightrag.github.io'><img src='https://img.shields.io/badge/Project-Page-Green'></a>
         <a href='https://youtu.be/oageL-1I0GE'><img src='https://badges.aleen42.com/src/youtube.svg'></a>
         <a href='https://arxiv.org/abs/2410.05779'><img src='https://img.shields.io/badge/arXiv-2410.05779-b31b1b'></a>
-        <a href='https://discord.gg/E4HgTnck'><img src='https://discordapp.com/api/guilds/1296348098003734629/widget.png?style=shield'></a>
+        <a href='https://learnopencv.com/lightrag'><img src='https://img.shields.io/badge/LearnOpenCV-blue'></a>
     </p>
      <p>
           <img src='https://img.shields.io/github/stars/hkuds/lightrag?color=green&style=social' />
-        <img src="https://img.shields.io/badge/python->=3.9.11-blue">
+        <img src="https://img.shields.io/badge/python->=3.10-blue">
         <a href="https://pypi.org/project/lightrag-hku/"><img src="https://img.shields.io/pypi/v/lightrag-hku.svg"></a>
         <a href="https://pepy.tech/project/lightrag-hku"><img src="https://static.pepy.tech/badge/lightrag-hku/month"></a>
+    </p>
+    <p>
+    <a href='https://discord.gg/yF2MmDJyGJ'><img src='https://discordapp.com/api/guilds/1296348098003734629/widget.png?style=shield'></a>
+        <a href='https://github.com/HKUDS/LightRAG/issues/285'><img src='https://img.shields.io/badge/群聊-wechat-green'></a>
     </p>
 
 This repository hosts the code of LightRAG. The structure of this code is based on [nano-graphrag](https://github.com/gusye1234/nano-graphrag).
@@ -22,21 +26,25 @@ This repository hosts the code of LightRAG. The structure of this code is based 
 </div>
 
 ## 🎉 News
-- [x] [2024.11.12]🎯📢You can [use Oracle Database 23ai for all storage types (kv/vector/graph)](https://github.com/HKUDS/LightRAG/blob/main/examples/lightrag_oracle_demo.py) now.
+- [x] [2024.11.25]🎯📢LightRAG now supports seamless integration of [custom knowledge graphs](https://github.com/HKUDS/LightRAG?tab=readme-ov-file#insert-custom-kg), empowering users to enhance the system with their own domain expertise.
+- [x] [2024.11.19]🎯📢A comprehensive guide to LightRAG is now available on [LearnOpenCV](https://learnopencv.com/lightrag). Many thanks to the blog author.
+- [x] [2024.11.12]🎯📢LightRAG now supports [Oracle Database 23ai for all storage types (KV, vector, and graph)](https://github.com/HKUDS/LightRAG/blob/main/examples/lightrag_oracle_demo.py).
 - [x] [2024.11.11]🎯📢LightRAG now supports [deleting entities by their names](https://github.com/HKUDS/LightRAG?tab=readme-ov-file#delete-entity).
 - [x] [2024.11.09]🎯📢Introducing the [LightRAG Gui](https://lightrag-gui.streamlit.app), which allows you to insert, query, visualize, and download LightRAG knowledge.
 - [x] [2024.11.04]🎯📢You can now [use Neo4J for Storage](https://github.com/HKUDS/LightRAG?tab=readme-ov-file#using-neo4j-for-storage).
 - [x] [2024.10.29]🎯📢LightRAG now supports multiple file types, including PDF, DOC, PPT, and CSV via `textract`.
 - [x] [2024.10.20]🎯📢We’ve added a new feature to LightRAG: Graph Visualization.
 - [x] [2024.10.18]🎯📢We’ve added a link to a [LightRAG Introduction Video](https://youtu.be/oageL-1I0GE). Thanks to the author!
-- [x] [2024.10.17]🎯📢We have created a [Discord channel](https://discord.gg/E4HgTnck)! Welcome to join for sharing and discussions! 🎉🎉
+- [x] [2024.10.17]🎯📢We have created a [Discord channel](https://discord.gg/yF2MmDJyGJ)! Welcome to join for sharing and discussions! 🎉🎉
 - [x] [2024.10.16]🎯📢LightRAG now supports [Ollama models](https://github.com/HKUDS/LightRAG?tab=readme-ov-file#quick-start)!
 - [x] [2024.10.15]🎯📢LightRAG now supports [Hugging Face models](https://github.com/HKUDS/LightRAG?tab=readme-ov-file#quick-start)!
 
 ## Algorithm Flowchart
 
-![LightRAG_Self excalidraw](https://github.com/user-attachments/assets/aa5c4892-2e44-49e6-a116-2403ed80a1a3)
-
+![LightRAG Indexing Flowchart](https://learnopencv.com/wp-content/uploads/2024/11/LightRAG-VectorDB-Json-KV-Store-Indexing-Flowchart-scaled.jpg)
+*Figure 1: LightRAG Indexing Flowchart - Img Caption : [Source](https://learnopencv.com/lightrag/)*
+![LightRAG Retrieval and Querying Flowchart](https://learnopencv.com/wp-content/uploads/2024/11/LightRAG-Querying-Flowchart-Dual-Level-Retrieval-Generation-Knowledge-Graphs-scaled.jpg)
+*Figure 2: LightRAG Retrieval and Querying Flowchart - Img Caption : [Source](https://learnopencv.com/lightrag/)*
 
 ## Install
 
@@ -102,7 +110,7 @@ print(rag.query("What are the top themes in this story?", param=QueryParam(mode=
 * LightRAG also supports Open AI-like chat/embeddings APIs:
 ```python
 async def llm_model_func(
-    prompt, system_prompt=None, history_messages=[], **kwargs
+    prompt, system_prompt=None, history_messages=[], keyword_extraction=False, **kwargs
 ) -> str:
     return await openai_complete_if_cache(
         "solar-mini",
@@ -190,34 +198,6 @@ rag = LightRAG(
     ),
 )
 ```
-
-### Using Neo4J for Storage
-
-* For production level scenarios you will most likely want to leverage an enterprise solution
-* for KG storage. Running Neo4J in Docker is recommended for seamless local testing.
-* See: https://hub.docker.com/_/neo4j
-
-
-```python
-export NEO4J_URI="neo4j://localhost:7687"
-export NEO4J_USERNAME="neo4j"
-export NEO4J_PASSWORD="password"
-
-When you launch the project be sure to override the default KG: NetworkS
-by specifying kg="Neo4JStorage".
-
-# Note: Default settings use NetworkX
-#Initialize LightRAG with Neo4J implementation.
-WORKING_DIR = "./local_neo4jWorkDir"
-
-rag = LightRAG(
-    working_dir=WORKING_DIR,
-    llm_model_func=gpt_4o_mini_complete,  # Use gpt_4o_mini_complete LLM model
-    kg="Neo4JStorage", #<-----------override KG default
-    log_level="DEBUG"  #<-----------override log_level default
-)
-```
-see test_neo4j.py for a working example.
 
 ### Increasing context size
 In order for LightRAG to work context should be at least 32k tokens. By default Ollama models have context size of 8k. You can achieve this using one of two ways:
@@ -313,6 +293,90 @@ rag = LightRAG(
 
 with open("./newText.txt") as f:
     rag.insert(f.read())
+```
+
+### Using Neo4J for Storage
+
+* For production level scenarios you will most likely want to leverage an enterprise solution
+* for KG storage. Running Neo4J in Docker is recommended for seamless local testing.
+* See: https://hub.docker.com/_/neo4j
+
+```python
+export NEO4J_URI="neo4j://localhost:7687"
+export NEO4J_USERNAME="neo4j"
+export NEO4J_PASSWORD="password"
+
+# When you launch the project be sure to override the default KG: NetworkX
+# by specifying kg="Neo4JStorage".
+
+# Note: Default settings use NetworkX
+# Initialize LightRAG with Neo4J implementation.
+WORKING_DIR = "./local_neo4jWorkDir"
+
+rag = LightRAG(
+    working_dir=WORKING_DIR,
+    llm_model_func=gpt_4o_mini_complete,  # Use gpt_4o_mini_complete LLM model
+    graph_storage="Neo4JStorage", #<-----------override KG default
+    log_level="DEBUG"  #<-----------override log_level default
+)
+```
+see test_neo4j.py for a working example.
+
+### Insert Custom KG
+
+```python
+rag = LightRAG(
+     working_dir=WORKING_DIR,
+     llm_model_func=llm_model_func,
+     embedding_func=EmbeddingFunc(
+          embedding_dim=embedding_dimension,
+          max_token_size=8192,
+          func=embedding_func,
+     ),
+)
+
+custom_kg = {
+    "entities": [
+        {
+            "entity_name": "CompanyA",
+            "entity_type": "Organization",
+            "description": "A major technology company",
+            "source_id": "Source1"
+        },
+        {
+            "entity_name": "ProductX",
+            "entity_type": "Product",
+            "description": "A popular product developed by CompanyA",
+            "source_id": "Source1"
+        }
+    ],
+    "relationships": [
+        {
+            "src_id": "CompanyA",
+            "tgt_id": "ProductX",
+            "description": "CompanyA develops ProductX",
+            "keywords": "develop, produce",
+            "weight": 1.0,
+            "source_id": "Source1"
+        }
+    ],
+    "chunks": [
+        {
+            "content": "ProductX, developed by CompanyA, has revolutionized the market with its cutting-edge features.",
+            "source_id": "Source1",
+        },
+        {
+            "content": "PersonA is a prominent researcher at UniversityB, focusing on artificial intelligence and machine learning.",
+            "source_id": "Source2",
+        },
+        {
+            "content": "None",
+            "source_id": "UNKNOWN",
+        },
+    ],
+}
+
+rag.insert_custom_kg(custom_kg)
 ```
 
 ### Delete Entity
@@ -498,6 +562,36 @@ if __name__ == "__main__":
 ```
 
 </details>
+
+### LightRAG init parameters
+
+| **Parameter** | **Type** | **Explanation** | **Default** |
+| --- | --- | --- | --- |
+| **working\_dir** | `str` | Directory where the cache will be stored | `lightrag_cache+timestamp` |
+| **kv\_storage** | `str` | Storage type for documents and text chunks. Supported types: `JsonKVStorage`, `OracleKVStorage` | `JsonKVStorage` |
+| **vector\_storage** | `str` | Storage type for embedding vectors. Supported types: `NanoVectorDBStorage`, `OracleVectorDBStorage` | `NanoVectorDBStorage` |
+| **graph\_storage** | `str` | Storage type for graph edges and nodes. Supported types: `NetworkXStorage`, `Neo4JStorage`, `OracleGraphStorage` | `NetworkXStorage` |
+| **log\_level** |     | Log level for application runtime | `logging.DEBUG` |
+| **chunk\_token\_size** | `int` | Maximum token size per chunk when splitting documents | `1200` |
+| **chunk\_overlap\_token\_size** | `int` | Overlap token size between two chunks when splitting documents | `100` |
+| **tiktoken\_model\_name** | `str` | Model name for the Tiktoken encoder used to calculate token numbers | `gpt-4o-mini` |
+| **entity\_extract\_max\_gleaning** | `int` | Number of loops in the entity extraction process, appending history messages | `1` |
+| **entity\_summary\_to\_max\_tokens** | `int` | Maximum token size for each entity summary | `500` |
+| **node\_embedding\_algorithm** | `str` | Algorithm for node embedding (currently not used) | `node2vec` |
+| **node2vec\_params** | `dict` | Parameters for node embedding | `{"dimensions": 1536,"num_walks": 10,"walk_length": 40,"window_size": 2,"iterations": 3,"random_seed": 3,}` |
+| **embedding\_func** | `EmbeddingFunc` | Function to generate embedding vectors from text | `openai_embedding` |
+| **embedding\_batch\_num** | `int` | Maximum batch size for embedding processes (multiple texts sent per batch) | `32` |
+| **embedding\_func\_max\_async** | `int` | Maximum number of concurrent asynchronous embedding processes | `16` |
+| **llm\_model\_func** | `callable` | Function for LLM generation | `gpt_4o_mini_complete` |
+| **llm\_model\_name** | `str` | LLM model name for generation | `meta-llama/Llama-3.2-1B-Instruct` |
+| **llm\_model\_max\_token\_size** | `int` | Maximum token size for LLM generation (affects entity relation summaries) | `32768` |
+| **llm\_model\_max\_async** | `int` | Maximum number of concurrent asynchronous LLM processes | `16` |
+| **llm\_model\_kwargs** | `dict` | Additional parameters for LLM generation |     |
+| **vector\_db\_storage\_cls\_kwargs** | `dict` | Additional parameters for vector database (currently not used) |     |
+| **enable\_llm\_cache** | `bool` | If `TRUE`, stores LLM results in cache; repeated prompts return cached responses | `TRUE` |
+| **addon\_params** | `dict` | Additional parameters, e.g., `{"example_number": 1, "language": "Simplified Chinese"}`: sets example limit and output language | `example_number: all examples, language: English` |
+| **convert\_response\_to\_json\_func** | `callable` | Not used | `convert_response_to_json` |
+| **embedding\_cache\_config** | `dict` | Configuration for question-answer caching. Contains three parameters:<br>- `enabled`: Boolean value to enable/disable cache lookup functionality. When enabled, the system will check cached responses before generating new answers.<br>- `similarity_threshold`: Float value (0-1), similarity threshold. When a new question's similarity with a cached question exceeds this threshold, the cached answer will be returned directly without calling the LLM.<br>- `use_llm_check`: Boolean value to enable/disable LLM similarity verification. When enabled, LLM will be used as a secondary check to verify the similarity between questions before returning cached answers. | Default: `{"enabled": False, "similarity_threshold": 0.95, "use_llm_check": False}` |
 
 ## API Server Implementation
 
@@ -867,24 +961,32 @@ def extract_queries(file_path):
 
 ```python
 .
-├── examples
+├── .github/
+│   ├── workflows/
+│   │   └── linting.yaml
+├── examples/
 │   ├── batch_eval.py
 │   ├── generate_query.py
 │   ├── graph_visual_with_html.py
 │   ├── graph_visual_with_neo4j.py
+│   ├── insert_custom_kg.py
 │   ├── lightrag_api_openai_compatible_demo.py
+│   ├── lightrag_api_oracle_demo..py
 │   ├── lightrag_azure_openai_demo.py
 │   ├── lightrag_bedrock_demo.py
 │   ├── lightrag_hf_demo.py
 │   ├── lightrag_lmdeploy_demo.py
+│   ├── lightrag_nvidia_demo.py
 │   ├── lightrag_ollama_demo.py
 │   ├── lightrag_openai_compatible_demo.py
 │   ├── lightrag_openai_demo.py
+│   ├── lightrag_oracle_demo.py
 │   ├── lightrag_siliconcloud_demo.py
 │   └── vram_management_demo.py
-├── lightrag
-│   ├── kg
+├── lightrag/
+│   ├── kg/
 │   │   ├── __init__.py
+│   │   ├── oracle_impl.py
 │   │   └── neo4j_impl.py
 │   ├── __init__.py
 │   ├── base.py
@@ -894,7 +996,7 @@ def extract_queries(file_path):
 │   ├── prompt.py
 │   ├── storage.py
 │   └── utils.py
-├── reproduce
+├── reproduce/
 │   ├── Step_0.py
 │   ├── Step_1_openai_compatible.py
 │   ├── Step_1.py
@@ -903,7 +1005,6 @@ def extract_queries(file_path):
 │   └── Step_3.py
 ├── .gitignore
 ├── .pre-commit-config.yaml
-├── Dockerfile
 ├── get_all_edges_nx.py
 ├── LICENSE
 ├── README.md
@@ -912,6 +1013,7 @@ def extract_queries(file_path):
 ├── test_neo4j.py
 └── test.py
 ```
+
 
 ## Star History
 

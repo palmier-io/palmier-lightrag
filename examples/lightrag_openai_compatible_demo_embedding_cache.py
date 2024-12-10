@@ -60,6 +60,10 @@ async def main():
 
         rag = LightRAG(
             working_dir=WORKING_DIR,
+            embedding_cache_config={
+                "enabled": True,
+                "similarity_threshold": 0.90,
+            },
             llm_model_func=llm_model_func,
             embedding_func=EmbeddingFunc(
                 embedding_dim=embedding_dimension,

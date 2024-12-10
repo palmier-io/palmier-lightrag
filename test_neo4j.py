@@ -17,7 +17,7 @@ if not os.path.exists(WORKING_DIR):
 rag = LightRAG(
     working_dir=WORKING_DIR,
     llm_model_func=gpt_4o_mini_complete,  # Use gpt_4o_mini_complete LLM model
-    graph_storage="NeptuneCypherStorage",
+    graph_storage="Neo4JStorage",
     log_level="INFO",
     chunk_summary_enabled=True,
     # vector_storage="QdrantStorage",
