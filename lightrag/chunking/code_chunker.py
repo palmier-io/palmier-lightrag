@@ -6,12 +6,12 @@ import logging
 from typing import Dict, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass
-from .language_parsers import (
+from lightrag.chunking.language_parsers import (
     get_language_from_file,
     SUPPORT_LANGUAGES,
     FILES_TO_IGNORE,
 )
-from ..prompt import PROMPTS
+from lightrag.prompt import PROMPTS
 
 
 class ChunkType(Enum):
@@ -183,7 +183,7 @@ class CodeChunker:
         if language_name == "text only":
             chunks = self._chunking_by_token_size(content, relative_file_path)
         elif language_name in SUPPORT_LANGUAGES:
-            content_bytes = content.encode('utf-8')
+            content_bytes = content.encode("utf-8")
             chunks = self._chunking_by_tree_sitter(
                 content_bytes, language_name, relative_file_path
             )
@@ -199,8 +199,8 @@ class CodeChunker:
         self, content: str, file_path: str, current_index: int = 0
     ) -> List[CodeChunk]:
         """Chunk the content of a file by token size"""
-
         tokens = self.encoding.encode(content)
+        lines = content.split("\n")
         results = []
 
         for index, start in enumerate(
@@ -209,14 +209,29 @@ class CodeChunker:
             end = start + self.target_tokens
             chunk_content = self.encoding.decode(tokens[start:end])
 
+            # Get the text before our chunk to count newlines for start_line
+            text_before = self.encoding.decode(tokens[:start])
+            start_line = text_before.count("\n")
+
+            # Get the actual lines for this chunk
+            chunk_lines = lines[start_line:]
+            chunk_text = "\n".join(chunk_lines)
+
+            # Find where our chunk content ends in the original lines
+            chunk_end_pos = chunk_text.find(chunk_content) + len(chunk_content)
+            end_line = start_line + chunk_text[:chunk_end_pos].count("\n")
+
+            # Use the original lines to reconstruct the content
+            content = "\n".join(lines[start_line : end_line + 1])
+
             results.append(
                 CodeChunk(
                     index=current_index + index,
                     file_path=file_path,
-                    content=chunk_content.strip(),
+                    content=content,
                     token_count=min(self.target_tokens, len(tokens) - start),
-                    start=Position(byte=start),
-                    end=Position(byte=end),
+                    start=Position(byte=start, line=start_line, character=0),
+                    end=Position(byte=end, line=end_line, character=0),
                     chunk_type=ChunkType.TOKEN_SIZE,
                 )
             )
@@ -387,6 +402,7 @@ def traverse_directory(root_dir: str) -> List[str]:
         for file in files:
             file_list.append(os.path.join(root, file))
     return file_list
+
 
 # NOT USED
 def generate_file_summary(

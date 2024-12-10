@@ -25,7 +25,7 @@ def function2():
         with open(file_path, "w") as f:
             f.write(test_code)
 
-        chunks = chunker.chunk_file(file_path)
+        chunks = chunker.chunk_file(file_path, test_code)
 
         assert len(chunks) == 1
         assert chunks[0]["content"] == test_code
@@ -88,7 +88,7 @@ def function2():
         with open(file_path, "w") as f:
             f.write(test_code)
 
-        chunks = chunker.chunk_file(file_path)
+        chunks = chunker.chunk_file(file_path, test_code)
         assert len(chunks) > 1
         assert all(
             chunk["token_count"] <= chunker.target_tokens + chunker.overlap_token_size

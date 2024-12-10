@@ -257,7 +257,7 @@ class LightRAG:
     def insert_files(self, directory: str, file_paths: Optional[list[str]] = None):
         """
         Palmier Specific - inserting file(s) to the knowledge graph
-        
+
         Input:
         - directory: the directory where the github repository is downloaded to
         - file_paths [optional]: a list of full file paths to insert. If not provided, the function will traverse the directory and insert all files.
@@ -265,7 +265,9 @@ class LightRAG:
         loop = always_get_an_event_loop()
         return loop.run_until_complete(self.ainsert_files(directory, file_paths))
 
-    async def ainsert_files(self, directory: str, file_paths: Optional[list[str]] = None):
+    async def ainsert_files(
+        self, directory: str, file_paths: Optional[list[str]] = None
+    ):
         """Palmier Specific - inserting file(s) to the knowledge graph"""
         update_storage = False
         try:
@@ -278,14 +280,17 @@ class LightRAG:
             )
 
             if file_paths is None:
-                logger.info(f"[Traversing] No file provided to ainsert_files, traversing {directory}")
+                logger.info(
+                    f"[Traversing] No file provided to ainsert_files, traversing {directory}"
+                )
                 file_paths = traverse_directory(directory)
 
             # Create a new document for each file
-            logger.info(f"[Filtering] processing {len(file_paths)} files at {directory}")
+            logger.info(
+                f"[Filtering] processing {len(file_paths)} files at {directory}"
+            )
             new_docs = {}
             for full_file_path in file_paths:
-
                 # Filter out unwanted/unsupported files
                 if any(full_file_path.endswith(ext) for ext in FILES_TO_IGNORE):
                     continue
@@ -298,7 +303,9 @@ class LightRAG:
 
                 relative_file_path = os.path.relpath(full_file_path, directory)
                 # use hash(file_path) as doc_id
-                new_docs[compute_mdhash_id(relative_file_path.strip(), prefix="doc-")] = {
+                new_docs[
+                    compute_mdhash_id(relative_file_path.strip(), prefix="doc-")
+                ] = {
                     "file_path": relative_file_path,
                     "language": language,
                     "content": content,
@@ -393,7 +400,7 @@ class LightRAG:
     def delete_files(self, directory: str, file_paths: list[str]):
         """
         Palmier Specific - deleting file(s) from the knowledge graph
-        
+
         Input:
         - directory: the directory where the github repository is downloaded to
         - file_paths: a list of full file paths to delete
