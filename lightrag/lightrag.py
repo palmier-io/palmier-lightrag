@@ -72,18 +72,18 @@ def lazy_external_import(module_name: str, class_name: str):
     return import_class
 
 
-Neo4JStorage = lazy_external_import(".kg.neo4j_impl", "Neo4JStorage")
-OracleKVStorage = lazy_external_import(".kg.oracle_impl", "OracleKVStorage")
-OracleGraphStorage = lazy_external_import(".kg.oracle_impl", "OracleGraphStorage")
-OracleVectorDBStorage = lazy_external_import(".kg.oracle_impl", "OracleVectorDBStorage")
-MilvusVectorDBStorge = lazy_external_import(".kg.milvus_impl", "MilvusVectorDBStorge")
-MongoKVStorage = lazy_external_import(".kg.mongo_impl", "MongoKVStorage")
+Neo4JStorage = lazy_external_import("lightrag.kg.neo4j_impl", "Neo4JStorage")
+OracleKVStorage = lazy_external_import("lightrag.kg.oracle_impl", "OracleKVStorage")
+OracleGraphStorage = lazy_external_import("lightrag.kg.oracle_impl", "OracleGraphStorage")
+OracleVectorDBStorage = lazy_external_import("lightrag.kg.oracle_impl", "OracleVectorDBStorage")
+MilvusVectorDBStorge = lazy_external_import("lightrag.kg.milvus_impl", "MilvusVectorDBStorge")
+MongoKVStorage = lazy_external_import("lightrag.kg.mongo_impl", "MongoKVStorage")
 SupabaseChunksStorage = lazy_external_import(
-    ".kg.supabase_impl", "SupabaseChunksStorage"
+    "lightrag.kg.supabase_impl", "SupabaseChunksStorage"
 )
-S3DocsStorage = lazy_external_import(".kg.s3_impl", "S3DocsStorage")
-QdrantStorage = lazy_external_import(".kg.qdrant_impl", "QdrantStorage")
-NeptuneCypherStorage = lazy_external_import(".kg.neptune_impl", "NeptuneCypherStorage")
+S3DocsStorage = lazy_external_import("lightrag.kg.s3_impl", "S3DocsStorage")
+QdrantStorage = lazy_external_import("lightrag.kg.qdrant_impl", "QdrantStorage")
+NeptuneCypherStorage = lazy_external_import("lightrag.kg.neptune_impl", "NeptuneCypherStorage")
 
 
 def always_get_an_event_loop() -> asyncio.AbstractEventLoop:
