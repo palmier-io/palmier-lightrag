@@ -517,7 +517,6 @@ async def openai_complete(
     if keyword_extraction:
         kwargs["response_format"] = "json"
     model_name = kwargs["hashing_kv"].global_config["llm_model_name"]
-    print(f"model_name: {model_name}")
     return await openai_complete_if_cache(
         model_name,
         prompt,
@@ -582,7 +581,6 @@ async def anthropic_complete(
         kwargs["response_format"] = "json"
     model_name = kwargs["hashing_kv"].global_config["llm_model_name"]
     model_name = model_name if model_name else "claude-3-5-sonnet-20241022"
-    print(f"model_name: {model_name}")
     return await anthropic_complete_if_cache(
         model_name,
         prompt,
