@@ -573,22 +573,6 @@ async def nvidia_openai_complete(
     return result
 
 
-async def azure_openai_complete(
-    prompt, system_prompt=None, history_messages=[], keyword_extraction=False, **kwargs
-) -> str:
-    keyword_extraction = kwargs.pop("keyword_extraction", None)
-    result = await azure_openai_complete_if_cache(
-        "gpt-4o-mini",
-        prompt,
-        system_prompt=system_prompt,
-        history_messages=history_messages,
-        **kwargs,
-    )
-    if keyword_extraction:  # TODO: use JSON API
-        return locate_json_string_body_from_string(result)
-    return result
-
-
 async def anthropic_complete(
     prompt, system_prompt=None, history_messages=[], **kwargs
 ) -> str:
@@ -606,7 +590,7 @@ async def azure_openai_complete(
 ) -> str:
     keyword_extraction = kwargs.pop("keyword_extraction", None)
     result = await azure_openai_complete_if_cache(
-        "conversation-4o-mini",
+        "gpt-4o-mini",
         prompt,
         system_prompt=system_prompt,
         history_messages=history_messages,

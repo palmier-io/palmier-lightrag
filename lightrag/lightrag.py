@@ -75,7 +75,9 @@ OracleGraphStorage = lazy_external_import(".kg.oracle_impl", "OracleGraphStorage
 OracleVectorDBStorage = lazy_external_import(".kg.oracle_impl", "OracleVectorDBStorage")
 MilvusVectorDBStorge = lazy_external_import(".kg.milvus_impl", "MilvusVectorDBStorge")
 MongoKVStorage = lazy_external_import(".kg.mongo_impl", "MongoKVStorage")
-SupabaseChunksStorage = lazy_external_import(".palmier_storage", "SupabaseChunksStorage")
+SupabaseChunksStorage = lazy_external_import(
+    ".palmier_storage", "SupabaseChunksStorage"
+)
 S3DocsStorage = lazy_external_import(".palmier_storage", "S3DocsStorage")
 QdrantStorage = lazy_external_import(".palmier_storage", "QdrantStorage")
 NeptuneCypherStorage = lazy_external_import(".palmier_storage", "NeptuneCypherStorage")

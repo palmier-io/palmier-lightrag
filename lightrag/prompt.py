@@ -297,7 +297,9 @@ Example summary:
 "config/database.py defines the core database configuration and connection management. It exports the DatabaseConfig class for handling connection parameters and the ConnectionPool singleton for managing database connections. Includes retry logic and connection pooling settings through POOL_SIZE and MAX_RETRIES constants. Part of the application's data access layer, working alongside models/ and repositories/."
 """
 
-PROMPTS["similarity_check"] = """Please analyze the similarity between these two questions:
+PROMPTS[
+    "similarity_check"
+] = """Please analyze the similarity between these two questions:
 
 Question 1: {original_prompt}
 Question 2: {cached_prompt}
