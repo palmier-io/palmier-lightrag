@@ -266,52 +266,7 @@ class Neo4JStorage(BaseGraphStorage):
     @db_retry_decorator()
     async def get_node_edges(self, source_node_id: str) -> List[Tuple[str, str]]:
         """
-<<<<<<< HEAD
         Retrieves all edges (relationships) for a particular node identified by its node_id within the same repository.
-=======
-        Retrieves all edges (relationships) for a particular node identified by its label.
-        :return: List of dictionaries containing edge information
-        """
-        query = f"""MATCH (n:`{node_label}`)
-                OPTIONAL MATCH (n)-[r]-(connected)
-                RETURN n, r, connected"""
-        async with self._driver.session() as session:
-            results = await session.run(query)
-            edges = []
-            async for record in results:
-                source_node = record["n"]
-                connected_node = record["connected"]
-
-                source_label = (
-                    list(source_node.labels)[0] if source_node.labels else None
-                )
-                target_label = (
-                    list(connected_node.labels)[0]
-                    if connected_node and connected_node.labels
-                    else None
-                )
-
-                if source_label and target_label:
-                    edges.append((source_label, target_label))
-
-            return edges
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(
-            (
-                neo4jExceptions.ServiceUnavailable,
-                neo4jExceptions.TransientError,
-                neo4jExceptions.WriteServiceUnavailable,
-                neo4jExceptions.ClientError,
-            )
-        ),
-    )
-    async def upsert_node(self, node_id: str, node_data: Dict[str, Any]):
-        """
-        Upsert a node in the Neo4j database.
->>>>>>> upstream/main
 
         Args:
             source_node_id (str): node_id of the source node
