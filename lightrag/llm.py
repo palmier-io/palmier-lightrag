@@ -574,8 +574,11 @@ async def nvidia_openai_complete(
 
 
 async def anthropic_complete(
-    prompt, system_prompt=None, history_messages=[], **kwargs
+    prompt, system_prompt=None, history_messages=[], keyword_extraction=False, **kwargs
 ) -> str:
+    keyword_extraction = kwargs.pop("keyword_extraction", None)
+    if keyword_extraction:
+        kwargs["response_format"] = "json"
     return await anthropic_complete_if_cache(
         "claude-3-5-sonnet-20241022",
         prompt,
