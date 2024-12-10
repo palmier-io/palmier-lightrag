@@ -259,7 +259,7 @@ end"""
             f.write(code)
 
         # Use chunk_file instead of chunk_code
-        chunks = chunker.chunk_file(file_path)
+        chunks = chunker.chunk_file(file_path, code)
 
         # Basic assertions
         assert len(chunks) > 0

@@ -183,7 +183,7 @@ class CodeChunker:
         if language_name == "text only":
             chunks = self._chunking_by_token_size(content, relative_file_path)
         elif language_name in SUPPORT_LANGUAGES:
-            content_bytes = content.encode('utf-8')
+            content_bytes = content.encode("utf-8")
             chunks = self._chunking_by_tree_sitter(
                 content_bytes, language_name, relative_file_path
             )
@@ -200,7 +200,7 @@ class CodeChunker:
     ) -> List[CodeChunk]:
         """Chunk the content of a file by token size"""
         tokens = self.encoding.encode(content)
-        lines = content.split('\n')
+        lines = content.split("\n")
         results = []
 
         for index, start in enumerate(
@@ -208,21 +208,21 @@ class CodeChunker:
         ):
             end = start + self.target_tokens
             chunk_content = self.encoding.decode(tokens[start:end])
-            
+
             # Get the text before our chunk to count newlines for start_line
             text_before = self.encoding.decode(tokens[:start])
-            start_line = text_before.count('\n')
-            
+            start_line = text_before.count("\n")
+
             # Get the actual lines for this chunk
             chunk_lines = lines[start_line:]
-            chunk_text = '\n'.join(chunk_lines)
-            
+            chunk_text = "\n".join(chunk_lines)
+
             # Find where our chunk content ends in the original lines
             chunk_end_pos = chunk_text.find(chunk_content) + len(chunk_content)
-            end_line = start_line + chunk_text[:chunk_end_pos].count('\n')
+            end_line = start_line + chunk_text[:chunk_end_pos].count("\n")
 
             # Use the original lines to reconstruct the content
-            content = '\n'.join(lines[start_line:end_line + 1])
+            content = "\n".join(lines[start_line : end_line + 1])
 
             results.append(
                 CodeChunk(
@@ -402,6 +402,7 @@ def traverse_directory(root_dir: str) -> List[str]:
         for file in files:
             file_list.append(os.path.join(root, file))
     return file_list
+
 
 # NOT USED
 def generate_file_summary(

@@ -37,7 +37,7 @@ class Neo4JStorage(BaseGraphStorage):
         URI = os.environ["NEO4J_URI"]
         USERNAME = os.environ["NEO4J_USERNAME"]
         PASSWORD = os.environ["NEO4J_PASSWORD"]
-        
+
         # Initialize driver without binding to a specific loop
         self._driver: AsyncDriver = AsyncGraphDatabase.driver(
             URI, auth=(USERNAME, PASSWORD)
@@ -279,7 +279,9 @@ class Neo4JStorage(BaseGraphStorage):
         try:
             async with self._driver.session() as session:
                 results = await session.run(
-                    query, repository_id=self.repository_id, source_node_id=source_node_id
+                    query,
+                    repository_id=self.repository_id,
+                    source_node_id=source_node_id,
                 )
                 edges = []
                 async for record in results:
@@ -320,6 +322,7 @@ class Neo4JStorage(BaseGraphStorage):
                     repository_id=self.repository_id,
                     properties=properties,
                 )
+
             async with self._driver.session() as session:
                 await session.execute_write(_do_upsert)
         except Exception as e:
@@ -359,6 +362,7 @@ class Neo4JStorage(BaseGraphStorage):
                     target_node_id=target_node_id,
                     properties=edge_properties,
                 )
+
             async with self._driver.session() as session:
                 await session.execute_write(_do_upsert_edge)
         except Exception as e:
