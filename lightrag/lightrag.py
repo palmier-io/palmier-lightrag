@@ -76,11 +76,11 @@ OracleVectorDBStorage = lazy_external_import(".kg.oracle_impl", "OracleVectorDBS
 MilvusVectorDBStorge = lazy_external_import(".kg.milvus_impl", "MilvusVectorDBStorge")
 MongoKVStorage = lazy_external_import(".kg.mongo_impl", "MongoKVStorage")
 SupabaseChunksStorage = lazy_external_import(
-    ".palmier_storage", "SupabaseChunksStorage"
+    ".kg.supabase_impl", "SupabaseChunksStorage"
 )
-S3DocsStorage = lazy_external_import(".palmier_storage", "S3DocsStorage")
-QdrantStorage = lazy_external_import(".palmier_storage", "QdrantStorage")
-NeptuneCypherStorage = lazy_external_import(".palmier_storage", "NeptuneCypherStorage")
+S3DocsStorage = lazy_external_import(".kg.s3_impl", "S3DocsStorage")
+QdrantStorage = lazy_external_import(".kg.qdrant_impl", "QdrantStorage")
+NeptuneCypherStorage = lazy_external_import(".kg.neptune_impl", "NeptuneCypherStorage")
 
 
 def always_get_an_event_loop() -> asyncio.AbstractEventLoop:
@@ -110,6 +110,8 @@ def always_get_an_event_loop() -> asyncio.AbstractEventLoop:
 
 @dataclass
 class LightRAG:
+    environment: str = field(default="dev")
+
     working_dir: str = field(
         default_factory=lambda: f"./lightrag_cache_{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}"
     )
