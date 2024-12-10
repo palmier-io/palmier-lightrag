@@ -604,7 +604,6 @@ async def _build_local_query_context(
 
     text_units_section_list = [["id", "content", "file_path", "start_line", "end_line"]]
     for i, t in enumerate(use_text_units):
-        print(t)
         text_units_section_list.append(
             [i, t["content"], t["file_path"], t["start"]["line"], t["end"]["line"]]
         )
@@ -896,7 +895,6 @@ async def _build_global_query_context(
 
     text_units_section_list = [["id", "content", "file_path", "start_line", "end_line"]]
     for i, t in enumerate(use_text_units):
-        print(t)
         text_units_section_list.append(
             [i, t["content"], t["file_path"], t["start"]["line"], t["end"]["line"]]
         )
