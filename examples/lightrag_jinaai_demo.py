@@ -1,9 +1,14 @@
+import numpy as np
+from lightrag import LightRAG, QueryParam
+from lightrag.utils import EmbeddingFunc
+from lightrag.llm import jina_embedding, openai_complete_if_cache
 import os
 import asyncio
-from lightrag import LightRAG, QueryParam
-from lightrag.llm import openai_complete_if_cache, openai_embedding
-from lightrag.utils import EmbeddingFunc
-import numpy as np
+
+
+async def embedding_func(texts: list[str]) -> np.ndarray:
+    return await jina_embedding(texts, api_key="YourJinaAPIKey")
+
 
 WORKING_DIR = "./dickens"
 
@@ -12,7 +17,7 @@ if not os.path.exists(WORKING_DIR):
 
 
 async def llm_model_func(
-    prompt, system_prompt=None, history_messages=[], keyword_extraction=False, **kwargs
+    prompt, system_prompt=None, history_messages=[], **kwargs
 ) -> str:
     return await openai_complete_if_cache(
         "solar-mini",
@@ -25,51 +30,52 @@ async def llm_model_func(
     )
 
 
-async def embedding_func(texts: list[str]) -> np.ndarray:
-    return await openai_embedding(
-        texts,
-        model="solar-embedding-1-large-query",
-        api_key=os.getenv("UPSTAGE_API_KEY"),
-        base_url="https://api.upstage.ai/v1/solar",
-    )
+rag = LightRAG(
+    working_dir=WORKING_DIR,
+    llm_model_func=llm_model_func,
+    embedding_func=EmbeddingFunc(
+        embedding_dim=1024, max_token_size=8192, func=embedding_func
+    ),
+)
 
 
-async def get_embedding_dim():
-    test_text = ["This is a test sentence."]
-    embedding = await embedding_func(test_text)
-    embedding_dim = embedding.shape[1]
-    return embedding_dim
+async def lightraginsert(file_path, semaphore):
+    async with semaphore:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except UnicodeDecodeError:
+            # If UTF-8 decoding fails, try other encodings
+            with open(file_path, "r", encoding="gbk") as f:
+                content = f.read()
+        await rag.ainsert(content)
 
 
-# function test
-async def test_funcs():
-    result = await llm_model_func("How are you?")
-    print("llm_model_func: ", result)
-
-    result = await embedding_func(["How are you?"])
-    print("embedding_func: ", result)
-
-
-# asyncio.run(test_funcs())
+async def process_files(directory, concurrency_limit):
+    semaphore = asyncio.Semaphore(concurrency_limit)
+    tasks = []
+    for root, dirs, files in os.walk(directory):
+        for f in files:
+            file_path = os.path.join(root, f)
+            if f.startswith("."):
+                continue
+            tasks.append(lightraginsert(file_path, semaphore))
+    await asyncio.gather(*tasks)
 
 
 async def main():
     try:
-        embedding_dimension = await get_embedding_dim()
-        print(f"Detected embedding dimension: {embedding_dimension}")
-
         rag = LightRAG(
             working_dir=WORKING_DIR,
             llm_model_func=llm_model_func,
             embedding_func=EmbeddingFunc(
-                embedding_dim=embedding_dimension,
+                embedding_dim=1024,
                 max_token_size=8192,
                 func=embedding_func,
             ),
         )
 
-        with open("./book.txt", "r", encoding="utf-8") as f:
-            await rag.ainsert(f.read())
+        asyncio.run(process_files(WORKING_DIR, concurrency_limit=4))
 
         # Perform naive search
         print(
