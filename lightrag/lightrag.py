@@ -56,14 +56,17 @@ from .chunking import (
 def lazy_external_import(module_name: str, class_name: str):
     """Lazily import an external module and return a class from it."""
 
-    def import_class():
+    def import_class(**kwargs):
         import importlib
 
         # Import the module using importlib
         module = importlib.import_module(module_name)
 
         # Get the class from the module
-        return getattr(module, class_name)
+        cls = getattr(module, class_name)
+        
+        # Return an instance if kwargs are provided, otherwise return the class
+        return cls(**kwargs) if kwargs else cls
 
     # Return the import_class function itself, not its result
     return import_class
