@@ -4,10 +4,28 @@ from typing import Optional
 from os import getenv
 from supabase import create_client
 from dataclasses import dataclass
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
+from postgrest.exceptions import APIError
+from httpx import HTTPError, TimeoutException
 
 
 @dataclass
 class SupabaseChunksStorage(BaseKVStorage):
+    def db_retry_decorator():
+        """Retry decorator for Supabase operations."""
+        return retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=4, max=10),
+            retry=retry_if_exception_type(
+                (APIError, HTTPError, TimeoutException)
+            ),
+        )
+
     def __post_init__(self):
         # Get Supabase credentials from environment variables
         supabase_url = getenv("SUPABASE_URL")
@@ -46,27 +64,39 @@ class SupabaseChunksStorage(BaseKVStorage):
         self.table = self.client.table(self.table_name)
         logger.info(f"Initialized Supabase chunks storage for repository {self.repo}")
 
+    @db_retry_decorator()
     async def all_keys(self) -> list[str]:
-        response = self.table.select("chunk_id").eq("repository", self.repo).execute()
-        return [row["chunk_id"] for row in response.data]
+        """List all keys (naturally idempotent - read-only operation)"""
+        try:
+            response = self.table.select("chunk_id").eq("repository", self.repo).execute()
+            return [row["chunk_id"] for row in response.data]
+        except Exception as e:
+            logger.error(f"Error in all_keys: {str(e)}")
+            raise
 
+    @db_retry_decorator()
     async def get_by_id(self, chunk_id: str) -> Optional[dict]:
-        response = (
-            self.table.select("*")
-            .eq("repository_id", self.repo_id)
-            .eq("chunk_id", chunk_id)
-            .execute()
-        )
-        if not response.data:
-            return None
+        """Get by ID (naturally idempotent - read-only operation)"""
+        try:
+            response = (
+                self.table.select("*")
+                .eq("repository_id", self.repo_id)
+                .eq("chunk_id", chunk_id)
+                .execute()
+            )
+            if not response.data:
+                return None
 
-        row = response.data[0]
-        return {
-            "content": row["content"],
-            "file_path": row["file_path"],
-            "full_doc_id": row["full_doc_id"],
-            **(row["metadata"] or {}),
-        }
+            row = response.data[0]
+            return {
+                "content": row["content"],
+                "file_path": row["file_path"],
+                "full_doc_id": row["full_doc_id"],
+                **(row["metadata"] or {}),
+            }
+        except Exception as e:
+            logger.error(f"Error in get_by_id: {str(e)}")
+            raise
 
     async def get_by_ids(
         self, chunk_ids: list[str], fields: Optional[set[str]] = None
@@ -133,33 +163,41 @@ class SupabaseChunksStorage(BaseKVStorage):
         existing_ids = {row["chunk_id"] for row in existing.data}
         return set(chunk_ids) - existing_ids
 
+    @db_retry_decorator()
     async def upsert(self, data: dict[str, dict]) -> dict[str, dict]:
-        # Convert to database format
-        supabase_data = []
-        for chunk_id, chunk_data in data.items():
-            # Extract core fields
-            db_row = {
-                "repository_id": self.repo_id,
-                "full_doc_id": chunk_data["full_doc_id"],
-                "chunk_id": chunk_id,
-                "repository": self.repo,
-                "file_path": chunk_data["file_path"],
-                "content": chunk_data["content"],
-            }
+        """
+        Insert or update chunks (idempotent using ON CONFLICT DO UPDATE)
+        """
+        try:
+            # Convert to database format
+            supabase_data = []
+            for chunk_id, chunk_data in data.items():
+                # Extract core fields
+                db_row = {
+                    "repository_id": self.repo_id,
+                    "full_doc_id": chunk_data["full_doc_id"],
+                    "chunk_id": chunk_id,
+                    "repository": self.repo,
+                    "file_path": chunk_data["file_path"],
+                    "content": chunk_data["content"],
+                }
 
-            # Put remaining fields in metadata
-            metadata = {
-                k: v
-                for k, v in chunk_data.items()
-                if k not in {"full_doc_id", "content", "file_path"}
-            }
-            if metadata:
-                db_row["metadata"] = metadata
+                # Put remaining fields in metadata
+                metadata = {
+                    k: v
+                    for k, v in chunk_data.items()
+                    if k not in {"full_doc_id", "content", "file_path"}
+                }
+                if metadata:
+                    db_row["metadata"] = metadata
 
-            supabase_data.append(db_row)
+                supabase_data.append(db_row)
 
-        self.table.upsert(supabase_data).execute()
-        return data
+            self.table.upsert(supabase_data).execute()
+            return data
+        except Exception as e:
+            logger.error(f"Error in upsert: {str(e)}")
+            raise
 
     async def drop(self):
         self.table.delete().eq("repository_id", self.repo_id).execute()

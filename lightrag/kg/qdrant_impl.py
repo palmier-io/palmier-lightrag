@@ -11,6 +11,12 @@ from ..utils import compute_mdhash_id, logger
 from tqdm.asyncio import tqdm as tqdm_async
 import asyncio
 import numpy as np
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 
 @dataclass
@@ -18,6 +24,16 @@ class QdrantStorage(BaseVectorStorage):
     """Qdrant vector storage implementation with multi-tenancy support."""
 
     cosine_better_than_threshold: float = 0.2
+
+    def db_retry_decorator():
+        """Retry decorator for database operations."""
+        return retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=4, max=10),
+            retry=retry_if_exception_type(
+                (UnexpectedResponse, ConnectionError, TimeoutError)
+            ),
+        )
 
     def __post_init__(self):
         self.environment = self.global_config.get("environment", "dev")
@@ -80,6 +96,7 @@ class QdrantStorage(BaseVectorStorage):
         hash_hex = hashlib.md5(hash_input.encode()).hexdigest()[-16:]
         return int(hash_hex, 16)
 
+    @db_retry_decorator()
     async def upsert(self, data: dict[str, dict]):
         """Insert or update vectors in Qdrant with repository_id."""
         logger.info(
@@ -141,6 +158,7 @@ class QdrantStorage(BaseVectorStorage):
         self._client.upsert(collection_name=self._collection_name, points=points)
         return points
 
+    @db_retry_decorator()
     async def _process_batch(self, batch_ids, batch_contents, batch_data, results):
         """Process a batch of vectors for insertion."""
         embeddings = await self.embedding_func(batch_contents)
@@ -159,6 +177,7 @@ class QdrantStorage(BaseVectorStorage):
         self._client.upsert(collection_name=self._collection_name, points=points)
         results.extend(points)
 
+    @db_retry_decorator()
     async def query(self, query: str, top_k: int = 5) -> list[dict]:
         """Query vectors from Qdrant within the same repository."""
         try:
@@ -188,6 +207,7 @@ class QdrantStorage(BaseVectorStorage):
             logger.error(f"Error during query operation: {e}")
             raise
 
+    @db_retry_decorator()
     async def query_by_id(self, id: str) -> dict | None:
         try:
             # Search using payload filter for original_id
@@ -217,6 +237,7 @@ class QdrantStorage(BaseVectorStorage):
             logger.error(f"Error during query_by_id operation: {e}")
             raise
 
+    @db_retry_decorator()
     async def delete_by_ids(self, ids: list[str]):
         """Delete vectors by their IDs within the same repository."""
         try:
@@ -250,6 +271,7 @@ class QdrantStorage(BaseVectorStorage):
             logger.error(f"Error during delete operation: {e}")
             raise
 
+    @db_retry_decorator()
     async def delete_entity(self, entity_name: str):
         """Delete an entity and its associated vectors within the same repository."""
         try:
@@ -276,6 +298,7 @@ class QdrantStorage(BaseVectorStorage):
         except Exception as e:
             logger.error(f"Error while deleting entity {entity_name}: {e}")
 
+    @db_retry_decorator()
     async def delete_relation(self, entity_name: str):
         """Delete all relations associated with an entity within the same repository."""
         try:
@@ -320,6 +343,7 @@ class QdrantStorage(BaseVectorStorage):
         # Qdrant handles persistence automatically
         pass
 
+    @db_retry_decorator()
     async def drop(self):
         """Delete all the points in this repository."""
         try:
