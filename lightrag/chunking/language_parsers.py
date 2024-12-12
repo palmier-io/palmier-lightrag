@@ -2,6 +2,9 @@ import os
 from pygments.lexers import get_lexer_for_filename
 from pygments.util import ClassNotFound
 from typing import Optional
+import logging
+from pathlib import Path
+logger = logging.getLogger(__name__)
 
 SUPPORT_LANGUAGES = [
     "bash",
@@ -57,8 +60,33 @@ FILES_TO_IGNORE = [
     "lock.json",
     "lock.yaml",
     "lock.yml",
+    "__init__.py",
 ]
 
+FOLDERS_TO_IGNORE = [
+    ".git",
+    ".github",
+    ".vscode",
+    ".DS_Store",
+    ".venv",
+    ".pytest_cache",
+    "__pycache__",
+]
+
+def should_ignore_file(file_path: str) -> bool:
+    if "test" in file_path:
+        return True
+    path = Path(file_path)
+    if path.is_dir():
+        if any(folder in path.parts for folder in FOLDERS_TO_IGNORE):
+            return True
+    elif path.is_file():
+        if any(path.name.endswith(ext) for ext in FILES_TO_IGNORE):
+            return True
+        language = get_language_from_file(file_path)
+        if language != "text only" and language not in SUPPORT_LANGUAGES:
+            return True
+    return False
 
 def get_language_from_file(file_path) -> Optional[str]:
     """

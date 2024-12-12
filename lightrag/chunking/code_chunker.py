@@ -171,6 +171,7 @@ class CodeChunker:
 
     def chunk_file(self, relative_file_path: str, content: str) -> List[Dict[str, Any]]:
         """Given a relative file path and content, return a list of chunks as dictionaries."""
+        logging.debug(f"Chunking file {relative_file_path}")
         # Remove leading separator and split path
         relative_file_path = relative_file_path.lstrip(os.sep)
 
@@ -402,23 +403,3 @@ def traverse_directory(root_dir: str) -> List[str]:
         for file in files:
             file_list.append(os.path.join(root, file))
     return file_list
-
-
-# NOT USED
-def generate_file_summary(
-    file_bytes: bytes, file_path: str, model: str = "gpt-4o-mini"
-) -> str:
-    import openai
-
-    client = openai.OpenAI()
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": PROMPTS["file_summary"].format(file_path=file_path),
-            },
-            {"role": "user", "content": file_bytes.decode("utf-8", errors="ignore")},
-        ],
-    )
-    return response.choices[0].message.content

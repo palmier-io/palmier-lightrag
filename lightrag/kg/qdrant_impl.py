@@ -8,6 +8,9 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 
 from ..base import BaseVectorStorage
 from ..utils import compute_mdhash_id, logger
+from tqdm.asyncio import tqdm as tqdm_async
+import asyncio
+import numpy as np
 
 
 @dataclass
@@ -86,40 +89,57 @@ class QdrantStorage(BaseVectorStorage):
             logger.warning("Attempting to insert empty data to vector DB")
             return []
 
-        results = []
-        batch_data = []
-        batch_ids = []
-        batch_contents = []
+        # Prepare all data upfront
+        list_data = []
+        contents = []
+        for doc_id, doc in data.items():
+            payload = {
+                k: v
+                for k, v in doc.items()
+                if k in self.meta_fields or k == "content"
+            }
+            payload["repository_id"] = self.repository_id
+            list_data.append((doc_id, payload))
+            contents.append(doc["content"])
 
-        try:
-            for doc_id, doc in data.items():
-                batch_ids.append(doc_id)
-                # Add repository_id to payload
-                payload = {
-                    k: v
-                    for k, v in doc.items()
-                    if k in self.meta_fields or k == "content"
-                }
-                payload["repository_id"] = self.repository_id
-                batch_data.append(payload)
-                batch_contents.append(doc["content"])
+        # Split into batches
+        batches = [
+            contents[i : i + self._max_batch_size]
+            for i in range(0, len(contents), self._max_batch_size)
+        ]
+        
+        # Create embedding tasks
+        embedding_tasks = [self.embedding_func(batch) for batch in batches]
+        embeddings_list = []
+        
+        # Process embeddings with progress bar
+        for f in tqdm_async(
+            asyncio.as_completed(embedding_tasks),
+            total=len(embedding_tasks),
+            desc="Generating embeddings",
+            unit="batch",
+        ):
+            embeddings = await f
+            embeddings_list.append(embeddings)
+        
+        # Combine all embeddings
+        embeddings = np.concatenate(embeddings_list)
+        
+        # Create points and upsert
+        points = [
+            models.PointStruct(
+                id=self._get_qdrant_id(doc_id),
+                vector=embedding.tolist(),
+                payload={
+                    **payload,
+                    "original_id": doc_id,
+                },
+            )
+            for (doc_id, payload), embedding in zip(list_data, embeddings)
+        ]
 
-                if len(batch_contents) >= self._max_batch_size:
-                    await self._process_batch(
-                        batch_ids, batch_contents, batch_data, results
-                    )
-                    batch_data, batch_ids, batch_contents = [], [], []
-
-            # Process remaining items
-            if batch_contents:
-                await self._process_batch(
-                    batch_ids, batch_contents, batch_data, results
-                )
-
-            return results
-        except Exception as e:
-            logger.error(f"Error during upsert operation: {e}")
-            raise
+        self._client.upsert(collection_name=self._collection_name, points=points)
+        return points
 
     async def _process_batch(self, batch_ids, batch_contents, batch_data, results):
         """Process a batch of vectors for insertion."""
@@ -127,7 +147,7 @@ class QdrantStorage(BaseVectorStorage):
         points = [
             models.PointStruct(
                 id=self._get_qdrant_id(id),  # Calculate integer ID on the fly
-                vector=embedding.tolist(),
+                vector=embedding,
                 payload={
                     **payload,
                     "original_id": id,  # Store original ID in payload
@@ -154,7 +174,7 @@ class QdrantStorage(BaseVectorStorage):
 
             results = self._client.search(
                 collection_name=self._collection_name,
-                query_vector=embedding[0].tolist(),
+                query_vector=embedding[0],
                 limit=top_k,
                 score_threshold=self.cosine_better_than_threshold,
                 query_filter=repository_filter,  # Uncomment and use the filter
@@ -166,6 +186,35 @@ class QdrantStorage(BaseVectorStorage):
             ]
         except Exception as e:
             logger.error(f"Error during query operation: {e}")
+            raise
+
+    async def query_by_id(self, id: str) -> dict | None:
+        try:
+            # Search using payload filter for original_id
+            results = self._client.scroll(
+                collection_name=self._collection_name,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="repository_id",
+                            match=models.MatchValue(value=self.repository_id)
+                        ),
+                        models.FieldCondition(
+                            key="original_id",
+                            match=models.MatchValue(value=id)
+                        )
+                    ]
+                ),
+                limit=1
+            )
+            
+            if results[0]:  
+                hit = results[0][0]
+                return {**hit.payload, "id": hit.payload["original_id"]}
+            
+            return None
+        except Exception as e:
+            logger.error(f"Error during query_by_id operation: {e}")
             raise
 
     async def delete_by_ids(self, ids: list[str]):

@@ -42,8 +42,13 @@ from .chunking import (
     CodeChunker,
     get_language_from_file,
     traverse_directory,
+    should_ignore_file,
     FILES_TO_IGNORE,
     SUPPORT_LANGUAGES,
+)
+
+from .palmier import (
+    update_summary,
 )
 
 # future KG integrations
@@ -265,6 +270,12 @@ class LightRAG:
             global_config=asdict(self),
             embedding_func=self.embedding_func,
         )
+        self.summaries_vdb = self.vector_db_storage_cls(
+            namespace="summaries",
+            global_config=asdict(self),
+            embedding_func=self.embedding_func,
+            meta_fields={"file_path", "type"}
+        )
 
         self.llm_model_func = limit_async_func_call(self.llm_model_max_async)(
             partial(
@@ -325,24 +336,19 @@ class LightRAG:
                     f"[Traversing] No file provided to ainsert_files, traversing {directory}"
                 )
                 file_paths = traverse_directory(directory)
+            
+            logger.info(f"[Updating Summary] Updating the summary tree")
+            await update_summary(directory, file_paths, self.summaries_vdb, self.llm_model_func)
 
             # Create a new document for each file
-            logger.info(
-                f"[Filtering] processing {len(file_paths)} files at {directory}"
-            )
             new_docs = {}
             for full_file_path in file_paths:
-                # Filter out unwanted/unsupported files
-                if any(full_file_path.endswith(ext) for ext in FILES_TO_IGNORE):
+                relative_file_path = os.path.relpath(full_file_path, directory)
+                if should_ignore_file(relative_file_path):
                     continue
-                language = get_language_from_file(full_file_path)
-                if language != "text only" and language not in SUPPORT_LANGUAGES:
-                    continue
-
                 with open(full_file_path, "r") as f:
                     content = f.read()
-
-                relative_file_path = os.path.relpath(full_file_path, directory)
+                language = get_language_from_file(full_file_path)
                 # use hash(file_path) as doc_id
                 new_docs[
                     compute_mdhash_id(relative_file_path.strip(), prefix="doc-")
@@ -360,6 +366,7 @@ class LightRAG:
             logger.info(f"[Chunking] chunking {len(new_docs)} docs")
             new_chunks = {}
             for doc_key, doc in new_docs.items():
+                logger.debug(f"Chunking file {doc['file_path']}")
                 chunks = {
                     # use hash(content) as chunk_id
                     compute_mdhash_id(dp["content"], prefix="chunk-"): {

@@ -172,6 +172,18 @@ class NanoVectorDBStorage(BaseVectorStorage):
             {**dp, "id": dp["__id__"], "distance": dp["__metrics__"]} for dp in results
         ]
         return results
+    
+    async def query_by_id(self, id: str) -> dict | None:
+        results = self._client.get([id])
+        if not results:
+            return None
+        
+        result = results[0]
+        return {
+            **result,
+            "id": result["__id__"],
+            "distance": 0.0
+        }
 
     async def delete_by_ids(self, ids: list[str]):
         self._client.delete(ids)
