@@ -94,6 +94,7 @@ class Neo4JStorage(BaseGraphStorage):
             await session.run(unique_node_query)
             await session.run(repository_id_index_query)
 
+    @staticmethod
     def db_retry_decorator():
         """
         Retry decorator for database operations.

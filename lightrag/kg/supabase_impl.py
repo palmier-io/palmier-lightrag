@@ -16,15 +16,13 @@ from httpx import HTTPError, TimeoutException
 
 @dataclass
 class SupabaseChunksStorage(BaseKVStorage):
-    def db_retry_decorator():
-        """Retry decorator for Supabase operations."""
-        return retry(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=1, min=4, max=10),
-            retry=retry_if_exception_type(
-                (APIError, HTTPError, TimeoutException)
-            ),
-        )
+    db_retry = retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(
+            (APIError, HTTPError, TimeoutException)
+        ),
+    )
 
     def __post_init__(self):
         # Get Supabase credentials from environment variables
@@ -64,7 +62,7 @@ class SupabaseChunksStorage(BaseKVStorage):
         self.table = self.client.table(self.table_name)
         logger.info(f"Initialized Supabase chunks storage for repository {self.repo}")
 
-    @db_retry_decorator()
+    @db_retry
     async def all_keys(self) -> list[str]:
         """List all keys (naturally idempotent - read-only operation)"""
         try:
@@ -74,7 +72,7 @@ class SupabaseChunksStorage(BaseKVStorage):
             logger.error(f"Error in all_keys: {str(e)}")
             raise
 
-    @db_retry_decorator()
+    @db_retry
     async def get_by_id(self, chunk_id: str) -> Optional[dict]:
         """Get by ID (naturally idempotent - read-only operation)"""
         try:
@@ -163,7 +161,7 @@ class SupabaseChunksStorage(BaseKVStorage):
         existing_ids = {row["chunk_id"] for row in existing.data}
         return set(chunk_ids) - existing_ids
 
-    @db_retry_decorator()
+    @db_retry
     async def upsert(self, data: dict[str, dict]) -> dict[str, dict]:
         """
         Insert or update chunks (idempotent using ON CONFLICT DO UPDATE)
