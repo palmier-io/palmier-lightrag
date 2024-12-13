@@ -122,9 +122,7 @@ class NanoVectorDBStorage(BaseVectorStorage):
                 {
                     "__id__": k,
                     **{k1: v1 for k1, v1 in v.items() if k1 in self.meta_fields},
-                    "__vector__": self._client.get([k])[0][
-                        "__vector__"
-                    ],  # Reuse existing embedding
+                    "__vector__": self._client.get([k])[0]["__vector__"],
                 }
                 for k, v in metadata_changes.items()
             ]
@@ -140,21 +138,25 @@ class NanoVectorDBStorage(BaseVectorStorage):
                 for k, v in content_changes.items()
             ]
             contents = [v["content"] for v in content_changes.values()]
+            
             batches = [
                 contents[i : i + self._max_batch_size]
                 for i in range(0, len(contents), self._max_batch_size)
             ]
-            embedding_tasks = [self.embedding_func(batch) for batch in batches]
-            embeddings_list = []
-            for f in tqdm_async(
-                asyncio.as_completed(embedding_tasks),
-                total=len(embedding_tasks),
-                desc="Generating embeddings",
-                unit="batch",
-            ):
-                embeddings = await f
-                embeddings_list.append(embeddings)
+
+            async def wrapped_task(batch):
+                result = await self.embedding_func(batch)
+                pbar.update(1)
+                return result
+
+            embedding_tasks = [wrapped_task(batch) for batch in batches]
+            pbar = tqdm_async(
+                total=len(embedding_tasks), desc="Generating embeddings", unit="batch"
+            )
+            embeddings_list = await asyncio.gather(*embedding_tasks)
+            
             embeddings = np.concatenate(embeddings_list)
+            
             for i, d in enumerate(list_data):
                 d["__vector__"] = embeddings[i]
             results.extend(self._client.upsert(datas=list_data))
