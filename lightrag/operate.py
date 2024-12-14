@@ -564,7 +564,7 @@ async def kg_query(
 
     # Get relevant summaries
     summaries = await summaries_vdb.query(query, top_k=query_param.top_k)
-    summary_context = [["levle", "file_path", "score", "content"]]
+    summary_context = [["id", "level", "file_path", "score", "content"]]
     for i, s in enumerate(summaries):
         summary_context.append(
             [

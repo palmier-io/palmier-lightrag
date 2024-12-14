@@ -150,8 +150,6 @@ class CodeChunker:
         target_tokens=800,
         overlap_token_size=128,
         tiktoken_model="gpt-4o",
-        summary_enabled=False,
-        summary_model="gpt-4o-mini",
     ):
         # Local root directory of where the repo is downloaded to
         self.root_dir = root_dir
@@ -165,8 +163,6 @@ class CodeChunker:
         # Encoding to calculate token count
         self.encoding = tiktoken.encoding_for_model(tiktoken_model)
 
-        self.summary_enabled = summary_enabled
-        self.summary_model = summary_model
 
     def chunk_file(self, relative_file_path: str, content: str) -> List[Dict[str, Any]]:
         """Given a relative file path and content, return a list of chunks as dictionaries."""

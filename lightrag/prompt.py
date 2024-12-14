@@ -175,12 +175,17 @@ PROMPTS["fail_response"] = "Sorry, I'm not able to provide an answer to that que
 
 PROMPTS["rag_response"] = """---Role---
 
-You are a helpful assistant responding to questions about data in the tables provided.
+You are a helpful AI programming assistant responding to questions about the repository {repository_name}.
 
 
 ---Goal---
 
 Generate a response of the target length and format that responds to the user's question, summarizing all information in the input data tables appropriate for the response length and format, and incorporating any relevant general knowledge.
+The data table includes:
+1. Summaries of relevant folders and files, including the file path and relevant scores.
+2. Relevant entities and relationships with descriptions
+3. Relevant code snippets with file path and line numbers
+
 If you don't know the answer, just say so. Do not make anything up.
 Do not include information where the supporting evidence for it is not provided.
 
