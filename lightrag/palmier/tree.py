@@ -271,6 +271,7 @@ async def update_summary(
 
     return updates
 
+
 def generate_directory_tree(
     root_directory: str, prefix: str = "", level: int = -1
 ) -> str:

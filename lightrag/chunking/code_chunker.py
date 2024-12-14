@@ -163,7 +163,6 @@ class CodeChunker:
         # Encoding to calculate token count
         self.encoding = tiktoken.encoding_for_model(tiktoken_model)
 
-
     def chunk_file(self, relative_file_path: str, content: str) -> List[Dict[str, Any]]:
         """Given a relative file path and content, return a list of chunks as dictionaries."""
         logging.debug(f"Chunking file {relative_file_path}")

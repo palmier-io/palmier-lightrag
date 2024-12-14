@@ -422,7 +422,7 @@ class LightRAG:
                 entity_vdb=self.entities_vdb,
                 relationships_vdb=self.relationships_vdb,
                 global_config=asdict(self),
-                summaries=summaries
+                summaries=summaries,
             )
             if maybe_new_kg is None:
                 logger.warning("No new entities and relationships found")

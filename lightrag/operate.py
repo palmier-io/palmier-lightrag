@@ -261,7 +261,7 @@ async def extract_entities(
     entity_vdb: BaseVectorStorage,
     relationships_vdb: BaseVectorStorage,
     global_config: dict,
-    summaries: Optional[dict] = None
+    summaries: Optional[dict] = None,
 ) -> Union[BaseGraphStorage, None]:
     use_llm_func: callable = global_config["llm_model_func"]
     entity_extract_max_gleaning = global_config["entity_extract_max_gleaning"]
@@ -312,12 +312,15 @@ async def extract_entities(
         chunk_dp = chunk_key_dp[1]
         content = chunk_dp["content"]
         summary_id = chunk_dp["full_doc_id"].replace("doc-", "sum-")
-        file_summary = summaries[summary_id]["content"] if summaries and summary_id in summaries else ""
+        file_summary = (
+            summaries[summary_id]["content"]
+            if summaries and summary_id in summaries
+            else ""
+        )
         # hint_prompt = entity_extract_prompt.format(**context_base, input_text=content)
         hint_prompt = entity_extract_prompt.format(
             **context_base, input_text="{input_text}", file_summary="{file_summary}"
         ).format(**context_base, input_text=content, file_summary=file_summary)
-        print(hint_prompt)
 
         final_result = await use_llm_func(hint_prompt)
         history = pack_user_ass_to_openai_messages(hint_prompt, final_result)
