@@ -9,7 +9,7 @@ import time
 from ..base import BaseVectorStorage
 from ..utils import compute_mdhash_id
 from ..chunking.language_parsers import should_ignore_file
-
+from ..prompt import PROMPTS
 logger = logging.getLogger(__name__)
 
 class SummaryType(Enum):
@@ -19,6 +19,7 @@ class SummaryType(Enum):
 
 @dataclass
 class SummaryNode:
+    id: str
     type: SummaryType
     content: str
     file_path: str
@@ -40,34 +41,19 @@ class SummaryNode:
 
         with open(path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read(max_content_length)
-            
-        prompt = f"""
-You are summarizing code structure, given the code content, file path, and the codebase structure.
-Summarize its purpose and content concisely and capture the important classes/functions/dependencies of the file.
-Try your best to explain the file's purppose and role in the codebase.
-
-Format:
-Single paragraph
-
-Example:
-The lightrag/llm.py file defines a QdrantStorage class, which is a vector storage implementation for the Qdrant vector database with multi-tenancy support. This dataclass extends BaseVectorStorage and provides comprehensive methods for interacting with Qdrant, including upsert (inserting or updating vectors), query, query_by_id, and delete operations. Key features include repository-specific filtering, deterministic ID generation, batch processing for embeddings, and robust error handling. The implementation supports vector storage with cosine similarity, handles environment-specific collection naming, and ensures data isolation across different repositories through a repository_id mechanism.
-
-Codebase structure:
-{tree}
-
-File path:
-{path}
-
-File content:
-{content}
-"""
-        
-        # summary = await use_llm_func(prompt, max_tokens=200)
-        summary = "This is a test summary"
         relative_path = os.path.relpath(path, root_directory)
+
+        prompt = PROMPTS["file_summary"].format(
+            tree=tree,
+            path=relative_path,
+            content=content
+        )
+        
+        summary = await use_llm_func(prompt, max_tokens=200)
         logger.debug(f"Generated summary for {relative_path}: {summary}")
 
         return SummaryNode(
+            id=compute_mdhash_id(relative_path, prefix="sum-"),
             type=SummaryType.FILE,
             content=summary,
             file_path=relative_path
@@ -85,38 +71,22 @@ File content:
         relative_path = os.path.relpath(path, root_directory)
         if not children_nodes:
             return SummaryNode(
+                id=compute_mdhash_id(relative_path, prefix="sum-"),
                 type=SummaryType.DIRECTORY,
                 content="Empty directory",
                 file_path=relative_path
             )
             
         children_summaries = [node.content for node in children_nodes]
-        prompt = f"""
-You are summarizing code structure, given the codebase structure, directory path, and the summaries of its children.
-Summarize its purpose and content concisely and cohesively.
-Try your best to explain the directory's purppose and role in the codebase. Return the summary in a single paragraph.
-
-Format:
-Single paragraph
-
-Example:
-The directory /configs contains configuration files for a data processing application that focuses on document chunking and summarization using large language models (LLMs), particularly those from OpenAI. The configurations define operational modes (test, development, production), specify the working directory for data storage, and set logging levels. Key features include parameters for chunking text into specified token counts, options for LLM summary generation, and various storage solutions for documents, chunks, vectors, and graphs, supporting backends like JsonKVStorage, Supabase, S3, Qdrant, and Neo4J. Additionally, the configurations address API authentication, optional features such as Stripe metering, and the use of environment variables for sensitive information like API keys, indicating a comprehensive setup for managing and deploying the application effectively."
-
-Codebase structure:
-{tree}
-
-Directory path:
-{path}
-
-Children summaries:
-{children_summaries}
-
-Provide a cohesive summary of the directory's purpose.
-"""
+        prompt = PROMPTS["folder_summary"].format(
+            tree=tree,
+            path=relative_path,
+            children_summaries=children_summaries
+        )
         
-        # summary = await use_llm_func(prompt, max_tokens=200)
-        summary = "This is a test summary"
+        summary = await use_llm_func(prompt, max_tokens=200)
         node = SummaryNode(
+            id=compute_mdhash_id(relative_path, prefix="sum-"),
             type=SummaryType.DIRECTORY,
             content=summary,
             file_path=relative_path
@@ -146,32 +116,16 @@ Provide a cohesive summary of the directory's purpose.
 
         joined_summaries = "\n".join([node.content for node in children_nodes])
 
-        prompt = f"""
-You are a helpful assistant that creates a global overview of a codebase.
-Below are a README, a tree structure of the codebase and a series of summaries extracted from different parts of the codebase (directories, files, components).
-Use these summaries to produce a single, coherent, high-level overview that describes:
-- The main purpose and functionality of the entire project
-- The key components and their roles
-- Any notable technologies, patterns, frameworks, or architectures used
+        prompt = PROMPTS["global_summary"].format(
+            readme_content=readme_content,
+            tree=tree,
+            joined_summaries=joined_summaries
+        )
 
-Avoid repeating the same information verbatim. Instead, synthesize these points into a concise, readable narrative.
-
-README:
-{readme_content}
-
-File Structure:
-{tree}
-
-Folder Summaries:
-{joined_summaries}
-
-Now, provide a global summary of the entire codebase.
-"""
-
-        # summary = await use_llm_func(prompt)
-        summary = "This is a test summary"
+        summary = await use_llm_func(prompt, max_tokens=500)
         logger.debug(f"Generated global summary: {summary}")
         return SummaryNode(
+            id=compute_mdhash_id("/", prefix="sum-"),
             type=SummaryType.GLOBAL,
             content=summary,
             file_path='/'
@@ -180,6 +134,7 @@ Now, provide a global summary of the entire codebase.
     def to_dict(self) -> dict:
         """Convert the node to a dictionary for storage."""
         return {
+            "id": self.id,
             "content": self.content,
             "file_path": self.file_path,
             "type": self.type.value 
@@ -189,6 +144,7 @@ Now, provide a global summary of the entire codebase.
     def from_dict(cls, data: dict) -> 'SummaryNode':
         """Create a SummaryNode from a dictionary."""
         return cls(
+            id=data["id"],
             type=SummaryType(data["type"]),
             content=data["content"],
             file_path=data["file_path"]
@@ -226,12 +182,11 @@ async def update_summary_recursive(
     if should_ignore_file(path):
         return None
 
-    # Handle files
+    # Bottom-up - create file nodes first
     if path_obj.is_file():
         node = await SummaryNode.create_file_node(str(path_obj), root_directory, tree, use_llm_func)            
         if node:
-            file_id = compute_mdhash_id(str(path_obj), prefix="sum-")
-            updates[file_id] = node.to_dict()
+            updates[node.id] = node.to_dict()
         return node
 
     children_nodes = []
@@ -262,8 +217,7 @@ async def update_summary_recursive(
     )
     
     # Store in vector database
-    dir_id = compute_mdhash_id(str(path_obj), prefix="sum-")
-    updates[dir_id] = dir_node.to_dict()
+    updates[dir_node.id] = dir_node.to_dict()
     
     return dir_node
 
@@ -315,8 +269,7 @@ async def update_summary(
             list(root_node.children.values()),
             use_llm_func
         )
-        global_id = compute_mdhash_id(directory, prefix="sum-")
-        updates[global_id] = global_node.to_dict()
+        updates[global_node.id] = global_node.to_dict()
 
     if updates:
         logger.info(f"Batch updating {len(updates)} summaries")

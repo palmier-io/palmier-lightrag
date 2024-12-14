@@ -531,6 +531,7 @@ async def kg_query(
     knowledge_graph_inst: BaseGraphStorage,
     entities_vdb: BaseVectorStorage,
     relationships_vdb: BaseVectorStorage,
+    summaries_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
     global_config: dict,
@@ -560,10 +561,25 @@ async def kg_query(
     if query_param.mode not in ["local", "global", "hybrid"]:
         logger.error(f"Unknown mode {query_param.mode} in kg_query")
         return PROMPTS["fail_response"]
+    
+    # Get relevant summaries
+    summaries = await summaries_vdb.query(query, top_k=query_param.top_k)
+    summary_context = [["levle", "file_path", "score", "content"]]
+    for i, s in enumerate(summaries):
+        summary_context.append(
+            [
+                i,
+                s["type"],
+                s["file_path"],
+                s["score"],
+                s["content"],
+            ]
+        )
+    summary_context = list_of_list_to_csv(summary_context)
 
     # LLM generate keywords
     kw_prompt_temp = PROMPTS["keywords_extraction"]
-    kw_prompt = kw_prompt_temp.format(query=query, examples=examples, language=language)
+    kw_prompt = kw_prompt_temp.format(query=query, examples=examples, language=language, summary_context=summary_context)
     result = await use_model_func(kw_prompt, keyword_extraction=True)
     logger.info("kw_prompt result:")
     print(result)
@@ -602,6 +618,7 @@ async def kg_query(
 
     # Build context
     keywords = [ll_keywords, hl_keywords]
+
     context = await _build_query_context(
         keywords,
         knowledge_graph_inst,
@@ -609,6 +626,7 @@ async def kg_query(
         relationships_vdb,
         text_chunks_db,
         query_param,
+        summary_context,
     )
 
     if query_param.only_need_context:
@@ -660,6 +678,7 @@ async def _build_query_context(
     relationships_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
+    summary_context: str,
 ):
     ll_kewwords, hl_keywrds = query[0], query[1]
     if query_param.mode in ["local", "hybrid"]:
@@ -727,6 +746,10 @@ async def _build_query_context(
             hl_text_units_context,
         )
     return f"""
+-----Summaries-----
+```csv
+{summary_context}
+```
 -----Entities-----
 ```csv
 {entities_context}

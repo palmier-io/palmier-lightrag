@@ -574,6 +574,7 @@ class LightRAG:
             self.entities_vdb,
             self.relationships_vdb,
             self.chunks_vdb,
+            self.summaries_vdb,
             self.chunk_entity_relation_graph,
         ]:
             if storage_inst is None:
@@ -728,6 +729,7 @@ class LightRAG:
                 self.chunk_entity_relation_graph,
                 self.entities_vdb,
                 self.relationships_vdb,
+                self.summaries_vdb,
                 self.text_chunks,
                 param,
                 asdict(self),

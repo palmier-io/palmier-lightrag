@@ -201,7 +201,7 @@ You are a helpful assistant tasked with identifying both high-level and low-leve
 
 ---Goal---
 
-Given the query, list both high-level and low-level keywords. High-level keywords focus on overarching concepts or themes, while low-level keywords focus on specific entities, details, or concrete terms.
+Given the query and document summaries, list both high-level and low-level keywords. High-level keywords focus on overarching concepts or themes, while low-level keywords focus on specific entities, details, or concrete terms.
 
 ---Instructions---
 
@@ -219,6 +219,8 @@ Given the query, list both high-level and low-level keywords. High-level keyword
 -Real Data-
 ######################
 Query: {query}
+Document summaries:
+{summary_context}
 ######################
 The `Output` should be human text, not unicode characters. Keep the same language as `Query`.
 Output:
@@ -282,22 +284,6 @@ Add sections and commentary to the response as appropriate for the length and fo
 """
 
 PROMPTS[
-    "file_summary"
-] = """Analyze the given code content from {file_path} and provide a concise technical summary that:
-
-1. Identifies the primary purpose and role of this file in the codebase
-2. Lists key components (classes, functions, constants) and their core responsibilities
-3. Notes any important patterns, dependencies, or architectural decisions
-4. Considers the file's location/path for additional context about its role
-5. Highlights any configuration, constants, or shared resources defined
-
-Keep the summary focused and technical, around 25-50 words. Format as a single paragraph that emphasizes the file's role in the larger system.
-
-Example summary:
-"config/database.py defines the core database configuration and connection management. It exports the DatabaseConfig class for handling connection parameters and the ConnectionPool singleton for managing database connections. Includes retry logic and connection pooling settings through POOL_SIZE and MAX_RETRIES constants. Part of the application's data access layer, working alongside models/ and repositories/."
-"""
-
-PROMPTS[
     "similarity_check"
 ] = """Please analyze the similarity between these two questions:
 
@@ -314,4 +300,66 @@ Please provide a similarity score between 0 and 1, where:
 0.5: Partially related and answer needs modification to be used
 
 Return only a number between 0-1, without any additional content.
+"""
+
+PROMPTS["global_summary"] = """
+You are a helpful assistant that creates a global overview of a codebase.
+Below are a README, a tree structure of the codebase and a series of summaries extracted from different parts of the codebase (directories, files, components).
+Use these summaries to produce a single, coherent, high-level overview that describes:
+- The main purpose and functionality of the entire project
+- The key components and their roles
+- Any notable technologies, patterns, frameworks, or architectures used
+
+Avoid repeating the same information verbatim. Instead, synthesize these points into a concise, readable narrative.
+
+README:
+{readme_content}
+
+File Structure:
+{tree}
+
+Folder Summaries:
+{joined_summaries}
+
+Now, provide a global summary of the entire codebase.
+"""
+
+PROMPTS["folder_summary"] = """
+You are summarizing code structure, given the codebase structure, directory path, and the summaries of its children.
+Summarize its purpose and content concisely and cohesively.
+Try your best to explain the directory's purppose and role in the codebase. Return the summary in a single paragraph.
+
+Example:
+The directory /configs contains configuration files for a data processing application that focuses on document chunking and summarization using large language models (LLMs), particularly those from OpenAI. The configurations define operational modes (test, development, production), specify the working directory for data storage, and set logging levels. Key features include parameters for chunking text into specified token counts, options for LLM summary generation, and various storage solutions for documents, chunks, vectors, and graphs, supporting backends like JsonKVStorage, Supabase, S3, Qdrant, and Neo4J. Additionally, the configurations address API authentication, optional features such as Stripe metering, and the use of environment variables for sensitive information like API keys, indicating a comprehensive setup for managing and deploying the application effectively."
+
+Codebase structure:
+{tree}
+
+Directory path:
+{path}
+
+Children summaries:
+{children_summaries}
+
+Provide a cohesive summary of the directory's purpose in a single paragraph.
+"""
+
+PROMPTS["file_summary"] = """
+You are summarizing code structure, given the code content, file path, and the codebase structure.
+Summarize its purpose and content concisely and capture the important classes/functions/dependencies of the file.
+Try your best to explain the file's purppose and role in the codebase.
+
+Example:
+The lightrag/llm.py file defines a QdrantStorage class, which is a vector storage implementation for the Qdrant vector database with multi-tenancy support. This dataclass extends BaseVectorStorage and provides comprehensive methods for interacting with Qdrant, including upsert (inserting or updating vectors), query, query_by_id, and delete operations. Key features include repository-specific filtering, deterministic ID generation, batch processing for embeddings, and robust error handling. The implementation supports vector storage with cosine similarity, handles environment-specific collection naming, and ensures data isolation across different repositories through a repository_id mechanism.
+
+Codebase structure:
+{tree}
+
+File path:
+{path}
+
+File content:
+{content}
+
+Provide a summary of the file's purpose in a single paragraph.
 """

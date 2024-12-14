@@ -26,7 +26,7 @@ from tenacity import (
 class QdrantStorage(BaseVectorStorage):
     """Qdrant vector storage implementation with multi-tenancy support."""
 
-    cosine_better_than_threshold: float = 0.2
+    cosine_better_than_threshold: float = 0.3
 
     db_retry = retry(
         stop=stop_after_attempt(3),
