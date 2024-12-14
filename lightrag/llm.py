@@ -43,6 +43,7 @@ else:
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=4, max=10),
@@ -83,11 +84,12 @@ async def openai_complete_if_cache(
     token_usage = {
         "prompt_tokens": response.usage.prompt_tokens,
         "completion_tokens": response.usage.completion_tokens,
-        "total_tokens": response.usage.total_tokens
+        "total_tokens": response.usage.total_tokens,
     }
     print(f"Token usage: {token_usage}")
 
     if hasattr(response, "__aiter__"):
+
         async def inner():
             async for chunk in response:
                 content = chunk.choices[0].delta.content

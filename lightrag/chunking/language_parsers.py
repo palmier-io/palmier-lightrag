@@ -4,6 +4,7 @@ from pygments.util import ClassNotFound
 from typing import Optional
 import logging
 from pathlib import Path
+
 logger = logging.getLogger(__name__)
 
 SUPPORT_LANGUAGES = [
@@ -73,6 +74,7 @@ FOLDERS_TO_IGNORE = [
     "__pycache__",
 ]
 
+
 def should_ignore_file(file_path: str) -> bool:
     if "test" in file_path:
         return True
@@ -87,6 +89,7 @@ def should_ignore_file(file_path: str) -> bool:
         if language != "text only" and language not in SUPPORT_LANGUAGES:
             return True
     return False
+
 
 def get_language_from_file(file_path) -> Optional[str]:
     """

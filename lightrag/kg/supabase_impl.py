@@ -19,9 +19,7 @@ class SupabaseChunksStorage(BaseKVStorage):
     db_retry = retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(
-            (APIError, HTTPError, TimeoutException)
-        ),
+        retry=retry_if_exception_type((APIError, HTTPError, TimeoutException)),
     )
 
     def __post_init__(self):
@@ -66,7 +64,9 @@ class SupabaseChunksStorage(BaseKVStorage):
     async def all_keys(self) -> list[str]:
         """List all keys (naturally idempotent - read-only operation)"""
         try:
-            response = self.table.select("chunk_id").eq("repository", self.repo).execute()
+            response = (
+                self.table.select("chunk_id").eq("repository", self.repo).execute()
+            )
             return [row["chunk_id"] for row in response.data]
         except Exception as e:
             logger.error(f"Error in all_keys: {str(e)}")

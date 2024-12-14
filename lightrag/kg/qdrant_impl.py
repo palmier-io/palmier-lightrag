@@ -5,7 +5,6 @@ import atexit
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
-from qdrant_client.http.exceptions import UnexpectedResponse
 from grpc import StatusCode
 from grpc._channel import _InactiveRpcError
 
@@ -84,7 +83,9 @@ class QdrantStorage(BaseVectorStorage):
                         field_name="repository_id",
                         field_schema=models.PayloadSchemaType.KEYWORD,
                     )
-                    logger.info(f"Created new Qdrant collection {self._collection_name}")
+                    logger.info(
+                        f"Created new Qdrant collection {self._collection_name}"
+                    )
                 else:
                     raise
         except Exception as e:
@@ -97,7 +98,7 @@ class QdrantStorage(BaseVectorStorage):
     def _cleanup(self):
         """Cleanup method to properly close the gRPC channel"""
         try:
-            if hasattr(self, '_client'):
+            if hasattr(self, "_client"):
                 self._client.close()
         except Exception as e:
             logger.warning(f"Error during client cleanup: {e}")
@@ -131,9 +132,7 @@ class QdrantStorage(BaseVectorStorage):
         contents = []
         for doc_id, doc in data.items():
             payload = {
-                k: v
-                for k, v in doc.items()
-                if k in self.meta_fields or k == "content"
+                k: v for k, v in doc.items() if k in self.meta_fields or k == "content"
             }
             payload["repository_id"] = self.repository_id
             list_data.append((doc_id, payload))
@@ -154,9 +153,9 @@ class QdrantStorage(BaseVectorStorage):
             total=len(embedding_tasks), desc="Generating embeddings", unit="batch"
         )
         embeddings_list = await asyncio.gather(*embedding_tasks)
-        
+
         embeddings = np.concatenate(embeddings_list)
-        
+
         points = [
             models.PointStruct(
                 id=self._get_qdrant_id(doc_id),
@@ -212,21 +211,20 @@ class QdrantStorage(BaseVectorStorage):
                     must=[
                         models.FieldCondition(
                             key="repository_id",
-                            match=models.MatchValue(value=self.repository_id)
+                            match=models.MatchValue(value=self.repository_id),
                         ),
                         models.FieldCondition(
-                            key="original_id",
-                            match=models.MatchValue(value=id)
-                        )
+                            key="original_id", match=models.MatchValue(value=id)
+                        ),
                     ]
                 ),
-                limit=1
+                limit=1,
             )
-            
-            if results[0]:  
+
+            if results[0]:
                 hit = results[0][0]
                 return {**hit.payload, "id": hit.payload["original_id"]}
-            
+
             return None
         except Exception as e:
             logger.error(f"Error during query_by_id operation: {e}")

@@ -561,7 +561,7 @@ async def kg_query(
     if query_param.mode not in ["local", "global", "hybrid"]:
         logger.error(f"Unknown mode {query_param.mode} in kg_query")
         return PROMPTS["fail_response"]
-    
+
     # Get relevant summaries
     summaries = await summaries_vdb.query(query, top_k=query_param.top_k)
     summary_context = [["levle", "file_path", "score", "content"]]
@@ -579,7 +579,12 @@ async def kg_query(
 
     # LLM generate keywords
     kw_prompt_temp = PROMPTS["keywords_extraction"]
-    kw_prompt = kw_prompt_temp.format(query=query, examples=examples, language=language, summary_context=summary_context)
+    kw_prompt = kw_prompt_temp.format(
+        query=query,
+        examples=examples,
+        language=language,
+        summary_context=summary_context,
+    )
     result = await use_model_func(kw_prompt, keyword_extraction=True)
     logger.info("kw_prompt result:")
     print(result)

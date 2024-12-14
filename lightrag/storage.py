@@ -138,7 +138,7 @@ class NanoVectorDBStorage(BaseVectorStorage):
                 for k, v in content_changes.items()
             ]
             contents = [v["content"] for v in content_changes.values()]
-            
+
             batches = [
                 contents[i : i + self._max_batch_size]
                 for i in range(0, len(contents), self._max_batch_size)
@@ -154,9 +154,9 @@ class NanoVectorDBStorage(BaseVectorStorage):
                 total=len(embedding_tasks), desc="Generating embeddings", unit="batch"
             )
             embeddings_list = await asyncio.gather(*embedding_tasks)
-            
+
             embeddings = np.concatenate(embeddings_list)
-            
+
             for i, d in enumerate(list_data):
                 d["__vector__"] = embeddings[i]
             results.extend(self._client.upsert(datas=list_data))
@@ -174,18 +174,14 @@ class NanoVectorDBStorage(BaseVectorStorage):
             {**dp, "id": dp["__id__"], "distance": dp["__metrics__"]} for dp in results
         ]
         return results
-    
+
     async def query_by_id(self, id: str) -> dict | None:
         results = self._client.get([id])
         if not results:
             return None
-        
+
         result = results[0]
-        return {
-            **result,
-            "id": result["__id__"],
-            "distance": 0.0
-        }
+        return {**result, "id": result["__id__"], "distance": 0.0}
 
     async def delete_by_ids(self, ids: list[str]):
         self._client.delete(ids)

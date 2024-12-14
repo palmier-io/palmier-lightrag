@@ -11,7 +11,6 @@ from lightrag.chunking.language_parsers import (
     SUPPORT_LANGUAGES,
     FILES_TO_IGNORE,
 )
-from lightrag.prompt import PROMPTS
 
 
 class ChunkType(Enum):

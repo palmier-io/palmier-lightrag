@@ -53,7 +53,7 @@ class BaseVectorStorage(StorageNameSpace):
 
     async def query(self, query: str, top_k: int) -> list[dict]:
         raise NotImplementedError
-    
+
     async def query_by_id(self, id: str) -> dict | None:
         raise NotImplementedError
 

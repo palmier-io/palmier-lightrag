@@ -44,7 +44,7 @@ class MilvusVectorDBStorge(BaseVectorStorage):
         if not len(data):
             logger.warning("You insert an empty data to vector DB")
             return []
-            
+
         list_data = [
             {
                 "id": k,
@@ -53,7 +53,7 @@ class MilvusVectorDBStorge(BaseVectorStorage):
             for k, v in data.items()
         ]
         contents = [v["content"] for v in data.values()]
-        
+
         batches = [
             contents[i : i + self._max_batch_size]
             for i in range(0, len(contents), self._max_batch_size)
@@ -69,9 +69,9 @@ class MilvusVectorDBStorge(BaseVectorStorage):
             total=len(embedding_tasks), desc="Generating embeddings", unit="batch"
         )
         embeddings_list = await asyncio.gather(*embedding_tasks)
-        
+
         embeddings = np.concatenate(embeddings_list)
-        
+
         for i, d in enumerate(list_data):
             d["vector"] = embeddings[i]
         results = self._client.upsert(collection_name=self.namespace, data=list_data)
