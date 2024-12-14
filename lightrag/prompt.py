@@ -21,9 +21,11 @@ PROMPTS["DEFAULT_ENTITY_TYPES"] = [
 ]
 
 PROMPTS["entity_extraction"] = """-Goal-
-Given a code file or a text document that is potentially relevant to this activity and a list of entity types, identify all entities of those types from the code and all relationships among the identified entities.
+Given a code file or a text document and a corresponding file summary, along with a list of entity types, identify all entities of those types from the code and all relationships among the identified entities. The file summary is provided as context and should not appear in the final output.
 
 -Steps-
+0. Consider the provided file summary as additional context to help understand the roles, functionalities, and relationships in the code. Do not include the file summary text in the final output.
+
 1. Identify all entities in the code file. For each identified entity, extract the following information:
 - entity_name: Name of the entity, as it appears in the code
 - entity_type: One of the following types: [{entity_types}]
@@ -55,6 +57,7 @@ Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_
 -Real Data-
 ######################
 Entity_types: {entity_types}
+File_summary: {file_summary}
 Text: {input_text}
 ######################
 Output:

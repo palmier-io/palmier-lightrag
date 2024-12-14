@@ -225,7 +225,7 @@ async def update_summary(
     file_paths: list[str],
     summaries: BaseVectorStorage,
     use_llm_func: callable,
-):
+) -> Dict[str, Dict]:
     """
     Update summaries in the vector database for specified files and their parent directories.
     """
@@ -269,8 +269,7 @@ async def update_summary(
     duration = end_time - start_time
     logger.info(f"[Update Summary] Completed in {duration:.2f} seconds")
 
-    return root_node
-
+    return updates
 
 def generate_directory_tree(
     root_directory: str, prefix: str = "", level: int = -1

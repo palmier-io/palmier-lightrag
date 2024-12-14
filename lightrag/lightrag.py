@@ -344,7 +344,7 @@ class LightRAG:
                 file_paths = traverse_directory(directory)
 
             logger.info("[Updating Summary] Updating the summary tree")
-            await update_summary(
+            summaries = await update_summary(
                 directory, file_paths, self.summaries_vdb, self.llm_model_func
             )
 
@@ -354,14 +354,12 @@ class LightRAG:
                 relative_file_path = os.path.relpath(full_file_path, directory)
                 if should_ignore_file(full_file_path):
                     continue
-                logger.debug("Reading file: ", full_file_path)
                 with open(full_file_path, "r") as f:
                     content = f.read()
                 language = get_language_from_file(full_file_path)
                 # use hash(file_path) as doc_id
-                new_docs[
-                    compute_mdhash_id(relative_file_path.strip(), prefix="doc-")
-                ] = {
+                doc_id = compute_mdhash_id(relative_file_path, prefix="doc-")
+                new_docs[doc_id] = {
                     "file_path": relative_file_path,
                     "language": language,
                     "content": content,
@@ -424,6 +422,7 @@ class LightRAG:
                 entity_vdb=self.entities_vdb,
                 relationships_vdb=self.relationships_vdb,
                 global_config=asdict(self),
+                summaries=summaries
             )
             if maybe_new_kg is None:
                 logger.warning("No new entities and relationships found")
