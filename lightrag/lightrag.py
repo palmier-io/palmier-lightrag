@@ -45,7 +45,7 @@ from .chunking import (
     should_ignore_file,
 )
 
-from .palmier import (
+from .palmier.tree import (
     update_summary,
 )
 
