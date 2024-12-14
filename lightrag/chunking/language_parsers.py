@@ -62,6 +62,8 @@ FILES_TO_IGNORE = [
     "lock.yaml",
     "lock.yml",
     "__init__.py",
+    ".json",
+    ".xml",
 ]
 
 FOLDERS_TO_IGNORE = [
@@ -76,8 +78,6 @@ FOLDERS_TO_IGNORE = [
 
 
 def should_ignore_file(file_path: str) -> bool:
-    if "test" in file_path:
-        return True
     path = Path(file_path)
     if path.is_dir():
         if any(folder in path.parts for folder in FOLDERS_TO_IGNORE):

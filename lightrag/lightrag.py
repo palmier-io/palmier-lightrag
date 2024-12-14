@@ -354,7 +354,7 @@ class LightRAG:
             new_docs = {}
             for full_file_path in file_paths:
                 relative_file_path = os.path.relpath(full_file_path, directory)
-                if should_ignore_file(relative_file_path):
+                if should_ignore_file(full_file_path):
                     continue
                 logger.debug("Reading file: ", full_file_path)
                 with open(full_file_path, "r") as f:
