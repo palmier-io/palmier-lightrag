@@ -783,11 +783,11 @@ async def _get_node_data(
     entities_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
-):
+) -> tuple[str, str, str]:
     # get similar entities
     results = await entities_vdb.query(query, top_k=query_param.top_k)
     if not len(results):
-        return None
+        return "", "", ""
     # get entity information
     node_datas = await asyncio.gather(
         *[knowledge_graph_inst.get_node(r["entity_name"]) for r in results]
@@ -976,11 +976,11 @@ async def _get_edge_data(
     relationships_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
-):
+) -> tuple[str, str, str]:
     results = await relationships_vdb.query(keywords, top_k=query_param.top_k)
 
     if not len(results):
-        return None
+        return "", "", ""
 
     edge_datas = await asyncio.gather(
         *[knowledge_graph_inst.get_edge(r["src_id"], r["tgt_id"]) for r in results]
