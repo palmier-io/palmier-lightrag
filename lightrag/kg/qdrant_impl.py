@@ -194,7 +194,7 @@ class QdrantStorage(BaseVectorStorage):
             )
 
             return [
-                {**hit.payload, "id": hit.payload["original_id"], "score": hit.score}
+                {**hit.payload, "id": hit.payload["original_id"], "score": round(hit.score, 4)}
                 for hit in results
             ]
         except Exception as e:
@@ -348,11 +348,6 @@ class QdrantStorage(BaseVectorStorage):
                         match=models.MatchValue(value=self.repository_id),
                     )
                 ]
-            )
-
-            points = self._client.scroll(
-                collection_name=self._collection_name,
-                scroll_filter=repository_filter,
             )
 
             self._client.delete(
