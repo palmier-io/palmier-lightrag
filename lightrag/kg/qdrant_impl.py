@@ -1,20 +1,39 @@
 from dataclasses import dataclass
 import os
 import hashlib
+import atexit
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
-from qdrant_client.http.exceptions import UnexpectedResponse
+from grpc import StatusCode
+from grpc._channel import _InactiveRpcError
 
 from ..base import BaseVectorStorage
 from ..utils import compute_mdhash_id, logger
+from tqdm.asyncio import tqdm as tqdm_async
+import asyncio
+import numpy as np
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 
 @dataclass
 class QdrantStorage(BaseVectorStorage):
     """Qdrant vector storage implementation with multi-tenancy support."""
 
-    cosine_better_than_threshold: float = 0.2
+    cosine_better_than_threshold: float = 0.3
+
+    db_retry = retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(
+            (_InactiveRpcError, ConnectionError, TimeoutError)
+        ),
+    )
 
     def __post_init__(self):
         self.environment = self.global_config.get("environment", "dev")
@@ -29,43 +48,65 @@ class QdrantStorage(BaseVectorStorage):
 
         if not url or not api_key:
             raise ValueError("QDRANT_URL and QDRANT_API_KEY must be set")
+        
+        self.repository = self.global_config.get("repository_name")
+        self.repository_id = self.global_config.get("repository_id")
 
-        storage_params = self.global_config.get("storage_params")
-        if not storage_params:
-            raise ValueError("storage_params must be provided in global_config")
+        if not self.repository or not self.repository_id:
+            raise ValueError(
+                "repository and repository_id are required in global_config"
+            )
 
         # Initialize Qdrant client
         try:
             self._client = QdrantClient(
                 url=url,
                 api_key=api_key,
+                prefer_grpc=True,
             )
-            self.repository = storage_params.get("repository")
-            self.repository_id = str(storage_params.get("repository_id"))
-
             # Create collection if it doesn't exist
             try:
                 self._client.get_collection(self._collection_name)
                 logger.info(
                     f"Connected to existing Qdrant collection {self._collection_name}"
                 )
-            except (UnexpectedResponse, ValueError):
-                self._client.create_collection(
-                    collection_name=self._collection_name,
-                    vectors_config=models.VectorParams(
-                        size=self.embedding_func.embedding_dim,
-                        distance=models.Distance.COSINE,
-                    ),
-                )
-                self._client.create_payload_index(
-                    collection_name=self._collection_name,
-                    field_name="repository_id",
-                    field_schema=models.PayloadSchemaType.KEYWORD,
-                )
-                logger.info(f"Created new Qdrant collection {self._collection_name}")
+            except _InactiveRpcError as e:
+                if e.code() == StatusCode.NOT_FOUND:
+                    self._client.create_collection(
+                        collection_name=self._collection_name,
+                        vectors_config=models.VectorParams(
+                            size=self.embedding_func.embedding_dim,
+                            distance=models.Distance.COSINE,
+                        ),
+                    )
+                    self._client.create_payload_index(
+                        collection_name=self._collection_name,
+                        field_name="repository_id",
+                        field_schema=models.PayloadSchemaType.KEYWORD,
+                    )
+                    logger.info(
+                        f"Created new Qdrant collection {self._collection_name}"
+                    )
+                else:
+                    raise
         except Exception as e:
             logger.error(f"Failed to initialize Qdrant client: {e}")
             raise
+
+        # Register cleanup method to run at shutdown
+        atexit.register(self._cleanup)
+
+    def _cleanup(self):
+        """Cleanup method to properly close the gRPC channel"""
+        try:
+            if hasattr(self, "_client"):
+                self._client.close()
+        except Exception as e:
+            logger.warning(f"Error during client cleanup: {e}")
+
+    def __del__(self):
+        """Destructor to ensure cleanup"""
+        self._cleanup()
 
     def _get_qdrant_id(self, string_id: str) -> int:
         """Convert string ID to integer for Qdrant.
@@ -77,6 +118,7 @@ class QdrantStorage(BaseVectorStorage):
         hash_hex = hashlib.md5(hash_input.encode()).hexdigest()[-16:]
         return int(hash_hex, 16)
 
+    @db_retry
     async def upsert(self, data: dict[str, dict]):
         """Insert or update vectors in Qdrant with repository_id."""
         logger.info(
@@ -86,59 +128,51 @@ class QdrantStorage(BaseVectorStorage):
             logger.warning("Attempting to insert empty data to vector DB")
             return []
 
-        results = []
-        batch_data = []
-        batch_ids = []
-        batch_contents = []
+        # Prepare all data upfront
+        list_data = []
+        contents = []
+        for doc_id, doc in data.items():
+            payload = {
+                k: v for k, v in doc.items() if k in self.meta_fields or k == "content"
+            }
+            payload["repository_id"] = self.repository_id
+            list_data.append((doc_id, payload))
+            contents.append(doc["content"])
 
-        try:
-            for doc_id, doc in data.items():
-                batch_ids.append(doc_id)
-                # Add repository_id to payload
-                payload = {
-                    k: v
-                    for k, v in doc.items()
-                    if k in self.meta_fields or k == "content"
-                }
-                payload["repository_id"] = self.repository_id
-                batch_data.append(payload)
-                batch_contents.append(doc["content"])
+        batches = [
+            contents[i : i + self._max_batch_size]
+            for i in range(0, len(contents), self._max_batch_size)
+        ]
 
-                if len(batch_contents) >= self._max_batch_size:
-                    await self._process_batch(
-                        batch_ids, batch_contents, batch_data, results
-                    )
-                    batch_data, batch_ids, batch_contents = [], [], []
+        async def wrapped_task(batch):
+            result = await self.embedding_func(batch)
+            pbar.update(1)
+            return result
 
-            # Process remaining items
-            if batch_contents:
-                await self._process_batch(
-                    batch_ids, batch_contents, batch_data, results
-                )
+        embedding_tasks = [wrapped_task(batch) for batch in batches]
+        pbar = tqdm_async(
+            total=len(embedding_tasks), desc="Generating embeddings", unit="batch"
+        )
+        embeddings_list = await asyncio.gather(*embedding_tasks)
 
-            return results
-        except Exception as e:
-            logger.error(f"Error during upsert operation: {e}")
-            raise
+        embeddings = np.concatenate(embeddings_list)
 
-    async def _process_batch(self, batch_ids, batch_contents, batch_data, results):
-        """Process a batch of vectors for insertion."""
-        embeddings = await self.embedding_func(batch_contents)
         points = [
             models.PointStruct(
-                id=self._get_qdrant_id(id),  # Calculate integer ID on the fly
-                vector=embedding.tolist(),
+                id=self._get_qdrant_id(doc_id),
+                vector=embeddings[i],
                 payload={
                     **payload,
-                    "original_id": id,  # Store original ID in payload
+                    "original_id": doc_id,
                 },
             )
-            for id, embedding, payload in zip(batch_ids, embeddings, batch_data)
+            for i, (doc_id, payload) in enumerate(list_data)
         ]
 
         self._client.upsert(collection_name=self._collection_name, points=points)
-        results.extend(points)
+        return points
 
+    @db_retry
     async def query(self, query: str, top_k: int = 5) -> list[dict]:
         """Query vectors from Qdrant within the same repository."""
         try:
@@ -154,20 +188,50 @@ class QdrantStorage(BaseVectorStorage):
 
             results = self._client.search(
                 collection_name=self._collection_name,
-                query_vector=embedding[0].tolist(),
+                query_vector=embedding[0],
                 limit=top_k,
                 score_threshold=self.cosine_better_than_threshold,
                 query_filter=repository_filter,  # Uncomment and use the filter
             )
 
             return [
-                {**hit.payload, "id": hit.payload["original_id"], "distance": hit.score}
+                {**hit.payload, "id": hit.payload["original_id"], "score": round(hit.score, 4)}
                 for hit in results
             ]
         except Exception as e:
             logger.error(f"Error during query operation: {e}")
             raise
 
+    @db_retry
+    async def query_by_id(self, id: str) -> dict | None:
+        try:
+            # Search using payload filter for original_id
+            results = self._client.scroll(
+                collection_name=self._collection_name,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="repository_id",
+                            match=models.MatchValue(value=self.repository_id),
+                        ),
+                        models.FieldCondition(
+                            key="original_id", match=models.MatchValue(value=id)
+                        ),
+                    ]
+                ),
+                limit=1,
+            )
+
+            if results[0]:
+                hit = results[0][0]
+                return {**hit.payload, "id": hit.payload["original_id"]}
+
+            return None
+        except Exception as e:
+            logger.error(f"Error during query_by_id operation: {e}")
+            raise
+
+    @db_retry
     async def delete_by_ids(self, ids: list[str]):
         """Delete vectors by their IDs within the same repository."""
         try:
@@ -201,6 +265,7 @@ class QdrantStorage(BaseVectorStorage):
             logger.error(f"Error during delete operation: {e}")
             raise
 
+    @db_retry
     async def delete_entity(self, entity_name: str):
         """Delete an entity and its associated vectors within the same repository."""
         try:
@@ -227,6 +292,7 @@ class QdrantStorage(BaseVectorStorage):
         except Exception as e:
             logger.error(f"Error while deleting entity {entity_name}: {e}")
 
+    @db_retry
     async def delete_relation(self, entity_name: str):
         """Delete all relations associated with an entity within the same repository."""
         try:
@@ -271,6 +337,7 @@ class QdrantStorage(BaseVectorStorage):
         # Qdrant handles persistence automatically
         pass
 
+    @db_retry
     async def drop(self):
         """Delete all the points in this repository."""
         try:
@@ -283,12 +350,6 @@ class QdrantStorage(BaseVectorStorage):
                     )
                 ]
             )
-
-            points = self._client.scroll(
-                collection_name=self._collection_name,
-                scroll_filter=repository_filter,
-            )
-            print(points)
 
             self._client.delete(
                 collection_name=self._collection_name,

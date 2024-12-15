@@ -42,8 +42,11 @@ from .chunking import (
     CodeChunker,
     get_language_from_file,
     traverse_directory,
-    FILES_TO_IGNORE,
-    SUPPORT_LANGUAGES,
+    should_ignore_file,
+)
+
+from .palmier.tree import (
+    update_summary,
 )
 
 # future KG integrations
@@ -64,7 +67,7 @@ def lazy_external_import(module_name: str, class_name: str):
 
         # Get the class from the module
         cls = getattr(module, class_name)
-        
+
         # Return an instance if kwargs are provided, otherwise return the class
         return cls(**kwargs) if kwargs else cls
 
@@ -74,16 +77,24 @@ def lazy_external_import(module_name: str, class_name: str):
 
 Neo4JStorage = lazy_external_import("lightrag.kg.neo4j_impl", "Neo4JStorage")
 OracleKVStorage = lazy_external_import("lightrag.kg.oracle_impl", "OracleKVStorage")
-OracleGraphStorage = lazy_external_import("lightrag.kg.oracle_impl", "OracleGraphStorage")
-OracleVectorDBStorage = lazy_external_import("lightrag.kg.oracle_impl", "OracleVectorDBStorage")
-MilvusVectorDBStorge = lazy_external_import("lightrag.kg.milvus_impl", "MilvusVectorDBStorge")
+OracleGraphStorage = lazy_external_import(
+    "lightrag.kg.oracle_impl", "OracleGraphStorage"
+)
+OracleVectorDBStorage = lazy_external_import(
+    "lightrag.kg.oracle_impl", "OracleVectorDBStorage"
+)
+MilvusVectorDBStorge = lazy_external_import(
+    "lightrag.kg.milvus_impl", "MilvusVectorDBStorge"
+)
 MongoKVStorage = lazy_external_import("lightrag.kg.mongo_impl", "MongoKVStorage")
 SupabaseChunksStorage = lazy_external_import(
     "lightrag.kg.supabase_impl", "SupabaseChunksStorage"
 )
 S3DocsStorage = lazy_external_import("lightrag.kg.s3_impl", "S3DocsStorage")
 QdrantStorage = lazy_external_import("lightrag.kg.qdrant_impl", "QdrantStorage")
-NeptuneCypherStorage = lazy_external_import("lightrag.kg.neptune_impl", "NeptuneCypherStorage")
+NeptuneCypherStorage = lazy_external_import(
+    "lightrag.kg.neptune_impl", "NeptuneCypherStorage"
+)
 
 
 def always_get_an_event_loop() -> asyncio.AbstractEventLoop:
@@ -114,6 +125,8 @@ def always_get_an_event_loop() -> asyncio.AbstractEventLoop:
 @dataclass
 class LightRAG:
     environment: str = field(default="dev")
+    repository_name: str = field(default="")
+    repository_id: int = field(default=0)
 
     working_dir: str = field(
         default_factory=lambda: f"./lightrag_cache_{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}"
@@ -140,7 +153,6 @@ class LightRAG:
     chunk_token_size: int = 800
     chunk_overlap_token_size: int = 100
     tiktoken_model_name: str = "gpt-4o-mini"
-    chunk_summary_enabled: bool = False
 
     # entity extraction
     entity_extract_max_gleaning: int = 1
@@ -166,7 +178,9 @@ class LightRAG:
 
     # LLM
     llm_model_func: callable = gpt_4o_mini_complete  # hf_model_complete#
-    llm_model_name: str = "gpt-4o-mini"  #'meta-llama/Llama-3.2-1B'#'google/gemma-2-2b-it'
+    llm_model_name: str = (
+        "gpt-4o-mini"  #'meta-llama/Llama-3.2-1B'#'google/gemma-2-2b-it'
+    )
     llm_model_max_token_size: int = 32768
     llm_model_max_async: int = 16
     llm_model_kwargs: dict = field(default_factory=dict)
@@ -265,6 +279,12 @@ class LightRAG:
             global_config=asdict(self),
             embedding_func=self.embedding_func,
         )
+        self.summaries_vdb = self.vector_db_storage_cls(
+            namespace="summaries",
+            global_config=asdict(self),
+            embedding_func=self.embedding_func,
+            meta_fields={"file_path", "type"},
+        )
 
         self.llm_model_func = limit_async_func_call(self.llm_model_max_async)(
             partial(
@@ -317,7 +337,6 @@ class LightRAG:
                 target_tokens=self.chunk_token_size,
                 overlap_token_size=self.chunk_overlap_token_size,
                 tiktoken_model=self.tiktoken_model_name,
-                summary_enabled=self.chunk_summary_enabled,
             )
 
             if file_paths is None:
@@ -326,27 +345,23 @@ class LightRAG:
                 )
                 file_paths = traverse_directory(directory)
 
-            # Create a new document for each file
-            logger.info(
-                f"[Filtering] processing {len(file_paths)} files at {directory}"
+            logger.info("[Updating Summary] Updating the summary tree")
+            summaries = await update_summary(
+                directory, file_paths, self.summaries_vdb, self.llm_model_func
             )
+
+            # Create a new document for each file
             new_docs = {}
             for full_file_path in file_paths:
-                # Filter out unwanted/unsupported files
-                if any(full_file_path.endswith(ext) for ext in FILES_TO_IGNORE):
+                relative_file_path = os.path.relpath(full_file_path, directory)
+                if should_ignore_file(full_file_path):
                     continue
-                language = get_language_from_file(full_file_path)
-                if language != "text only" and language not in SUPPORT_LANGUAGES:
-                    continue
-
                 with open(full_file_path, "r") as f:
                     content = f.read()
-
-                relative_file_path = os.path.relpath(full_file_path, directory)
+                language = get_language_from_file(full_file_path)
                 # use hash(file_path) as doc_id
-                new_docs[
-                    compute_mdhash_id(relative_file_path.strip(), prefix="doc-")
-                ] = {
+                doc_id = compute_mdhash_id(relative_file_path, prefix="doc-")
+                new_docs[doc_id] = {
                     "file_path": relative_file_path,
                     "language": language,
                     "content": content,
@@ -360,6 +375,7 @@ class LightRAG:
             logger.info(f"[Chunking] chunking {len(new_docs)} docs")
             new_chunks = {}
             for doc_key, doc in new_docs.items():
+                logger.debug(f"Chunking file {doc['file_path']}")
                 chunks = {
                     # use hash(content) as chunk_id
                     compute_mdhash_id(dp["content"], prefix="chunk-"): {
@@ -408,6 +424,7 @@ class LightRAG:
                 entity_vdb=self.entities_vdb,
                 relationships_vdb=self.relationships_vdb,
                 global_config=asdict(self),
+                summaries=summaries,
             )
             if maybe_new_kg is None:
                 logger.warning("No new entities and relationships found")
@@ -567,6 +584,7 @@ class LightRAG:
             self.entities_vdb,
             self.relationships_vdb,
             self.chunks_vdb,
+            self.summaries_vdb,
             self.chunk_entity_relation_graph,
         ]:
             if storage_inst is None:
@@ -721,6 +739,7 @@ class LightRAG:
                 self.chunk_entity_relation_graph,
                 self.entities_vdb,
                 self.relationships_vdb,
+                self.summaries_vdb,
                 self.text_chunks,
                 param,
                 asdict(self),
@@ -799,7 +818,6 @@ class LightRAG:
         return loop.run_until_complete(self.adrop())
 
     async def adrop(self):
-        # TODO: drop all the storage
         try:
             logger.info("Dropping Graph Storage...")
             await self.chunk_entity_relation_graph.drop()

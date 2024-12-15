@@ -80,6 +80,14 @@ async def openai_complete_if_cache(
             model=model, messages=messages, **kwargs
         )
 
+    # Track token usage
+    token_usage = {
+        "prompt_tokens": response.usage.prompt_tokens,
+        "completion_tokens": response.usage.completion_tokens,
+        "total_tokens": response.usage.total_tokens,
+    }
+    print(f"Token usage: {token_usage}")
+
     if hasattr(response, "__aiter__"):
 
         async def inner():

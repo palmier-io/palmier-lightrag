@@ -2,7 +2,7 @@ import asyncio
 import json
 import re
 from tqdm.asyncio import tqdm as tqdm_async
-from typing import Union
+from typing import Union, Optional
 from collections import Counter, defaultdict
 import warnings
 from .utils import (
@@ -261,6 +261,7 @@ async def extract_entities(
     entity_vdb: BaseVectorStorage,
     relationships_vdb: BaseVectorStorage,
     global_config: dict,
+    summaries: Optional[dict] = None,
 ) -> Union[BaseGraphStorage, None]:
     use_llm_func: callable = global_config["llm_model_func"]
     entity_extract_max_gleaning = global_config["entity_extract_max_gleaning"]
@@ -310,10 +311,16 @@ async def extract_entities(
         chunk_key = chunk_key_dp[0]
         chunk_dp = chunk_key_dp[1]
         content = chunk_dp["content"]
+        summary_id = chunk_dp["full_doc_id"].replace("doc-", "sum-")
+        file_summary = (
+            summaries[summary_id]["content"]
+            if summaries and summary_id in summaries
+            else ""
+        )
         # hint_prompt = entity_extract_prompt.format(**context_base, input_text=content)
         hint_prompt = entity_extract_prompt.format(
-            **context_base, input_text="{input_text}"
-        ).format(**context_base, input_text=content)
+            **context_base, input_text="{input_text}", file_summary="{file_summary}"
+        ).format(**context_base, input_text=content, file_summary=file_summary)
 
         final_result = await use_llm_func(hint_prompt)
         history = pack_user_ass_to_openai_messages(hint_prompt, final_result)
@@ -531,6 +538,7 @@ async def kg_query(
     knowledge_graph_inst: BaseGraphStorage,
     entities_vdb: BaseVectorStorage,
     relationships_vdb: BaseVectorStorage,
+    summaries_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
     global_config: dict,
@@ -561,9 +569,29 @@ async def kg_query(
         logger.error(f"Unknown mode {query_param.mode} in kg_query")
         return PROMPTS["fail_response"]
 
+    # Get relevant summaries
+    summaries = await summaries_vdb.query(query, top_k=query_param.top_k)
+    summary_context = [["id", "level", "file_path", "score", "content"]]
+    for i, s in enumerate(summaries):
+        summary_context.append(
+            [
+                i,
+                s["type"],
+                s["file_path"],
+                s["score"],
+                s["content"],
+            ]
+        )
+    summary_context = list_of_list_to_csv(summary_context)
+
     # LLM generate keywords
     kw_prompt_temp = PROMPTS["keywords_extraction"]
-    kw_prompt = kw_prompt_temp.format(query=query, examples=examples, language=language)
+    kw_prompt = kw_prompt_temp.format(
+        query=query,
+        examples=examples,
+        language=language,
+        summary_context=summary_context,
+    )
     result = await use_model_func(kw_prompt, keyword_extraction=True)
     logger.info("kw_prompt result:")
     print(result)
@@ -602,6 +630,7 @@ async def kg_query(
 
     # Build context
     keywords = [ll_keywords, hl_keywords]
+
     context = await _build_query_context(
         keywords,
         knowledge_graph_inst,
@@ -609,6 +638,7 @@ async def kg_query(
         relationships_vdb,
         text_chunks_db,
         query_param,
+        summary_context,
     )
 
     if query_param.only_need_context:
@@ -617,7 +647,7 @@ async def kg_query(
         return PROMPTS["fail_response"]
     sys_prompt_temp = PROMPTS["rag_response"]
     sys_prompt = sys_prompt_temp.format(
-        context_data=context, response_type=query_param.response_type
+        context_data=context, response_type=query_param.response_type, repository_name=global_config.get("repository_name")
     )
     if query_param.only_need_prompt:
         return sys_prompt
@@ -660,6 +690,7 @@ async def _build_query_context(
     relationships_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
+    summary_context: str,
 ):
     ll_kewwords, hl_keywrds = query[0], query[1]
     if query_param.mode in ["local", "hybrid"]:
@@ -727,6 +758,10 @@ async def _build_query_context(
             hl_text_units_context,
         )
     return f"""
+-----Summaries-----
+```csv
+{summary_context}
+```
 -----Entities-----
 ```csv
 {entities_context}

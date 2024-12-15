@@ -5,10 +5,25 @@ from dataclasses import dataclass
 from typing import Union, Any
 from ..base import BaseKVStorage
 from ..utils import logger
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
+from botocore.exceptions import ClientError, ConnectionError, EndpointConnectionError
 
 
 @dataclass
 class S3DocsStorage(BaseKVStorage):
+    db_retry = retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(
+            (ClientError, ConnectionError, EndpointConnectionError)
+        ),
+    )
+
     def __post_init__(self):
         aws_access_key_id = os.getenv("AWS_S3_ACCESS_KEY_ID")
         aws_secret_access_key = os.getenv("AWS_S3_SECRET_ACCESS_KEY")
@@ -18,6 +33,13 @@ class S3DocsStorage(BaseKVStorage):
             )
 
         environment = self.global_config.get("environment", "dev")
+        self.repository = self.global_config.get("repository_name")
+        self.repository_id = self.global_config.get("repository_id")
+
+        if not self.repository or not self.repository_id:
+            raise ValueError(
+                "repository and repository_id are required in global_config"
+            )
 
         # Get storage params, raising error if not present
         storage_params = self.global_config.get("storage_params")
@@ -31,8 +53,6 @@ class S3DocsStorage(BaseKVStorage):
         # Get required parameters
         try:
             self.bucket_name = f"{s3_params['bucket_name']}-{environment}"
-            self.repository = storage_params["repository"]
-            self.repository_id = storage_params["repository_id"]
 
             # Add any other required S3 parameters here, for example:
             # self.region = s3_params["region"]
@@ -55,6 +75,7 @@ class S3DocsStorage(BaseKVStorage):
             logger.error(f"Error accessing S3 bucket {self.bucket_name}: {e}")
             raise
 
+    @db_retry
     async def all_keys(self) -> list[str]:
         """List all keys in the storage"""
         try:
@@ -70,6 +91,7 @@ class S3DocsStorage(BaseKVStorage):
             logger.error(f"Error listing keys from S3: {e}")
             return []
 
+    @db_retry
     async def get_by_id(self, id: str) -> Union[Any, None]:
         """Get a single item by ID"""
         try:
@@ -83,6 +105,7 @@ class S3DocsStorage(BaseKVStorage):
             logger.error(f"Error getting item {id} from S3: {e}")
             return None
 
+    @db_retry
     async def get_by_ids(
         self, ids: list[str], fields: Union[set[str], None] = None
     ) -> list[Union[Any, None]]:
@@ -95,6 +118,7 @@ class S3DocsStorage(BaseKVStorage):
             results.append(item)
         return results
 
+    @db_retry
     async def get_by_field(self, field: str, values: list[str]) -> dict[str, dict]:
         """Get items by field value"""
         # Note: This is inefficient for S3 as we need to scan all objects
@@ -110,11 +134,13 @@ class S3DocsStorage(BaseKVStorage):
 
         return result
 
+    @db_retry
     async def filter_keys(self, data: list[str]) -> set[str]:
         """Return keys that don't exist in storage"""
         existing_keys = set(await self.all_keys())
         return set(data) - existing_keys
 
+    @db_retry
     async def upsert(self, data: dict[str, dict]):
         """Insert or update items"""
         for key, value in data.items():
@@ -129,6 +155,7 @@ class S3DocsStorage(BaseKVStorage):
                 logger.error(f"Error upserting item {key} to S3: {e}")
         return data
 
+    @db_retry
     async def drop(self):
         """Delete all items in the namespace"""
         try:
@@ -143,6 +170,7 @@ class S3DocsStorage(BaseKVStorage):
         except Exception as e:
             logger.error(f"Error dropping S3 storage: {e}")
 
+    @db_retry
     async def delete_by_ids(self, ids: list[str]):
         """Delete items by IDs"""
         try:

@@ -54,6 +54,9 @@ class BaseVectorStorage(StorageNameSpace):
     async def query(self, query: str, top_k: int) -> list[dict]:
         raise NotImplementedError
 
+    async def query_by_id(self, id: str) -> dict | None:
+        raise NotImplementedError
+
     async def upsert(self, data: dict[str, dict]):
         """Use 'content' field from value for embedding, use key as id.
         If embedding_func is None, use 'embedding' field from value

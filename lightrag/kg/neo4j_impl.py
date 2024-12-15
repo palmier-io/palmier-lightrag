@@ -51,8 +51,8 @@ class Neo4JStorage(BaseGraphStorage):
         if not storage_param:
             raise ValueError("storage parameter is required in global config")
 
-        self.repository = storage_param.get("repository")
-        self.repository_id = str(storage_param.get("repository_id"))
+        self.repository = global_config.get("repository_name")
+        self.repository_id = str(global_config.get("repository_id"))
         if not self.repository or not self.repository_id:
             raise ValueError(
                 "repository and repository_id are required in storage parameter"
@@ -94,6 +94,7 @@ class Neo4JStorage(BaseGraphStorage):
             await session.run(unique_node_query)
             await session.run(repository_id_index_query)
 
+    @staticmethod
     def db_retry_decorator():
         """
         Retry decorator for database operations.

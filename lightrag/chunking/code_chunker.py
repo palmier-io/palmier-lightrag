@@ -11,7 +11,6 @@ from lightrag.chunking.language_parsers import (
     SUPPORT_LANGUAGES,
     FILES_TO_IGNORE,
 )
-from lightrag.prompt import PROMPTS
 
 
 class ChunkType(Enum):
@@ -151,8 +150,6 @@ class CodeChunker:
         target_tokens=800,
         overlap_token_size=128,
         tiktoken_model="gpt-4o",
-        summary_enabled=False,
-        summary_model="gpt-4o-mini",
     ):
         # Local root directory of where the repo is downloaded to
         self.root_dir = root_dir
@@ -166,11 +163,9 @@ class CodeChunker:
         # Encoding to calculate token count
         self.encoding = tiktoken.encoding_for_model(tiktoken_model)
 
-        self.summary_enabled = summary_enabled
-        self.summary_model = summary_model
-
     def chunk_file(self, relative_file_path: str, content: str) -> List[Dict[str, Any]]:
         """Given a relative file path and content, return a list of chunks as dictionaries."""
+        logging.debug(f"Chunking file {relative_file_path}")
         # Remove leading separator and split path
         relative_file_path = relative_file_path.lstrip(os.sep)
 
@@ -402,23 +397,3 @@ def traverse_directory(root_dir: str) -> List[str]:
         for file in files:
             file_list.append(os.path.join(root, file))
     return file_list
-
-
-# NOT USED
-def generate_file_summary(
-    file_bytes: bytes, file_path: str, model: str = "gpt-4o-mini"
-) -> str:
-    import openai
-
-    client = openai.OpenAI()
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": PROMPTS["file_summary"].format(file_path=file_path),
-            },
-            {"role": "user", "content": file_bytes.decode("utf-8", errors="ignore")},
-        ],
-    )
-    return response.choices[0].message.content
