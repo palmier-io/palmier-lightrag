@@ -354,7 +354,6 @@ class QdrantStorage(BaseVectorStorage):
                 collection_name=self._collection_name,
                 scroll_filter=repository_filter,
             )
-            print(points)
 
             self._client.delete(
                 collection_name=self._collection_name,

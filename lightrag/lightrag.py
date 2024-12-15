@@ -816,7 +816,6 @@ class LightRAG:
         return loop.run_until_complete(self.adrop())
 
     async def adrop(self):
-        # TODO: drop all the storage
         try:
             logger.info("Dropping Graph Storage...")
             await self.chunk_entity_relation_graph.drop()
