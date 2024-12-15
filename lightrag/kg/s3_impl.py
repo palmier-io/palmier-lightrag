@@ -33,6 +33,13 @@ class S3DocsStorage(BaseKVStorage):
             )
 
         environment = self.global_config.get("environment", "dev")
+        self.repository = self.global_config.get("repository_name")
+        self.repository_id = self.global_config.get("repository_id")
+
+        if not self.repository or not self.repository_id:
+            raise ValueError(
+                "repository and repository_id are required in global_config"
+            )
 
         # Get storage params, raising error if not present
         storage_params = self.global_config.get("storage_params")
@@ -46,8 +53,6 @@ class S3DocsStorage(BaseKVStorage):
         # Get required parameters
         try:
             self.bucket_name = f"{s3_params['bucket_name']}-{environment}"
-            self.repository = storage_params["repository"]
-            self.repository_id = storage_params["repository_id"]
 
             # Add any other required S3 parameters here, for example:
             # self.region = s3_params["region"]

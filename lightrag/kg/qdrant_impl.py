@@ -48,10 +48,14 @@ class QdrantStorage(BaseVectorStorage):
 
         if not url or not api_key:
             raise ValueError("QDRANT_URL and QDRANT_API_KEY must be set")
+        
+        self.repository = self.global_config.get("repository_name")
+        self.repository_id = self.global_config.get("repository_id")
 
-        storage_params = self.global_config.get("storage_params")
-        if not storage_params:
-            raise ValueError("storage_params must be provided in global_config")
+        if not self.repository or not self.repository_id:
+            raise ValueError(
+                "repository and repository_id are required in global_config"
+            )
 
         # Initialize Qdrant client
         try:
@@ -60,9 +64,6 @@ class QdrantStorage(BaseVectorStorage):
                 api_key=api_key,
                 prefer_grpc=True,
             )
-            self.repository = storage_params.get("repository")
-            self.repository_id = str(storage_params.get("repository_id"))
-
             # Create collection if it doesn't exist
             try:
                 self._client.get_collection(self._collection_name)

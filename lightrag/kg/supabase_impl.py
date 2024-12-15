@@ -48,8 +48,8 @@ class SupabaseChunksStorage(BaseKVStorage):
         # Get required parameters, raising specific errors if any are missing
         try:
             self.table_name = f"{supabase_params['table_name']}_{environment}"
-            self.repo = storage_params["repository"]
-            self.repo_id = storage_params["repository_id"]
+            self.repo = self.global_config.get("repository_name")
+            self.repo_id = self.global_config.get("repository_id")
         except KeyError as e:
             raise ValueError(
                 f"Missing required parameter in supabase config: {e.args[0]}"

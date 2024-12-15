@@ -647,7 +647,7 @@ async def kg_query(
         return PROMPTS["fail_response"]
     sys_prompt_temp = PROMPTS["rag_response"]
     sys_prompt = sys_prompt_temp.format(
-        context_data=context, response_type=query_param.response_type
+        context_data=context, response_type=query_param.response_type, repository_name=global_config.get("repository_name")
     )
     if query_param.only_need_prompt:
         return sys_prompt

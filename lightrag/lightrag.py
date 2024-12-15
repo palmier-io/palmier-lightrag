@@ -125,6 +125,8 @@ def always_get_an_event_loop() -> asyncio.AbstractEventLoop:
 @dataclass
 class LightRAG:
     environment: str = field(default="dev")
+    repository_name: str = field(default="")
+    repository_id: int = field(default=0)
 
     working_dir: str = field(
         default_factory=lambda: f"./lightrag_cache_{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}"
