@@ -283,7 +283,7 @@ class LightRAG:
             namespace="summaries",
             global_config=asdict(self),
             embedding_func=self.embedding_func,
-            meta_fields={"file_path", "type"},
+            meta_fields={"content", "file_path", "type"},
         )
 
         self.llm_model_func = limit_async_func_call(self.llm_model_max_async)(
