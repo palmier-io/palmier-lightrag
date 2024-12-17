@@ -544,6 +544,8 @@ async def kg_query(
     global_config: dict,
     hashing_kv: BaseKVStorage = None,
 ) -> str:
+    if query.strip() == "":
+        return PROMPTS["fail_response"]
     # Handle cache
     use_model_func = global_config["llm_model_func"]
     args_hash = compute_args_hash(query_param.mode, query)
@@ -570,14 +572,27 @@ async def kg_query(
         return PROMPTS["fail_response"]
 
     # Get relevant summaries
-    summaries = await summaries_vdb.query(query, top_k=query_param.top_k)
+    query_chunks = chunking_by_token_size(
+        query,
+        overlap_token_size=global_config["chunk_overlap_token_size"],
+        max_token_size=global_config["chunk_token_size"],
+        tiktoken_model=global_config["tiktoken_model_name"],
+    )
+    summaries = await asyncio.gather(*[summaries_vdb.query(chunk["content"], top_k=query_param.top_k) for chunk in query_chunks])
+    summaries = [item for sublist in summaries for item in sublist]
     summary_context = [["id", "level", "file_path", "score", "content"]]
+    seen_file_paths = set()
+    
     for i, s in enumerate(summaries):
+        file_path = s["file_path"]
+        if file_path in seen_file_paths:
+            continue
+        seen_file_paths.add(file_path)
         summary_context.append(
             [
                 i,
                 s["type"],
-                s["file_path"],
+                file_path,
                 s["score"],
                 s["content"],
             ]
