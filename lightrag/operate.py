@@ -575,7 +575,7 @@ async def kg_query(
     query_chunks = chunking_by_token_size(
         query,
         overlap_token_size=global_config["chunk_overlap_token_size"],
-        max_token_size=global_config["chunk_token_size"],
+        max_token_size=8192, # limit for text-embedding-3-small
         tiktoken_model=global_config["tiktoken_model_name"],
     )
     summaries = await asyncio.gather(
