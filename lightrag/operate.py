@@ -578,11 +578,16 @@ async def kg_query(
         max_token_size=global_config["chunk_token_size"],
         tiktoken_model=global_config["tiktoken_model_name"],
     )
-    summaries = await asyncio.gather(*[summaries_vdb.query(chunk["content"], top_k=query_param.top_k) for chunk in query_chunks])
+    summaries = await asyncio.gather(
+        *[
+            summaries_vdb.query(chunk["content"], top_k=query_param.top_k)
+            for chunk in query_chunks
+        ]
+    )
     summaries = [item for sublist in summaries for item in sublist]
     summary_context = [["id", "level", "file_path", "score", "content"]]
     seen_file_paths = set()
-    
+
     for i, s in enumerate(summaries):
         file_path = s["file_path"]
         if file_path in seen_file_paths:
@@ -662,7 +667,9 @@ async def kg_query(
         return PROMPTS["fail_response"]
     sys_prompt_temp = PROMPTS["rag_response"]
     sys_prompt = sys_prompt_temp.format(
-        context_data=context, response_type=query_param.response_type, repository_name=global_config.get("repository_name")
+        context_data=context,
+        response_type=query_param.response_type,
+        repository_name=global_config.get("repository_name"),
     )
     if query_param.only_need_prompt:
         return sys_prompt
