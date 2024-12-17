@@ -171,7 +171,13 @@ class NanoVectorDBStorage(BaseVectorStorage):
             better_than_threshold=self.cosine_better_than_threshold,
         )
         results = [
-            {**dp, "id": dp["__id__"], "distance": dp["__metrics__"], "score": dp["__metrics__"]} for dp in results
+            {
+                **dp,
+                "id": dp["__id__"],
+                "distance": dp["__metrics__"],
+                "score": dp["__metrics__"],
+            }
+            for dp in results
         ]
         return results
 

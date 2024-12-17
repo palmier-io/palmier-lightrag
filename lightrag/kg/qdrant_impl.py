@@ -48,7 +48,7 @@ class QdrantStorage(BaseVectorStorage):
 
         if not url or not api_key:
             raise ValueError("QDRANT_URL and QDRANT_API_KEY must be set")
-        
+
         self.repository = self.global_config.get("repository_name")
         self.repository_id = self.global_config.get("repository_id")
 
@@ -195,7 +195,11 @@ class QdrantStorage(BaseVectorStorage):
             )
 
             return [
-                {**hit.payload, "id": hit.payload["original_id"], "score": round(hit.score, 4)}
+                {
+                    **hit.payload,
+                    "id": hit.payload["original_id"],
+                    "score": round(hit.score, 4),
+                }
                 for hit in results
             ]
         except Exception as e:
