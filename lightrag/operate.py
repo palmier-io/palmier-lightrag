@@ -593,6 +593,7 @@ async def kg_query(
         if file_path in seen_file_paths:
             continue
         seen_file_paths.add(file_path)
+        print("SUMMARY: ", s)
         summary_context.append(
             [
                 i,
