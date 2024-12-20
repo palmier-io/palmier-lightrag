@@ -133,7 +133,7 @@ class QdrantStorage(BaseVectorStorage):
         contents = []
         for doc_id, doc in data.items():
             payload = {
-                k: v for k, v in doc.items() if k in self.meta_fields or k == "content"
+                k: v for k, v in doc.items() if k in self.meta_fields
             }
             payload["repository_id"] = self.repository_id
             list_data.append((doc_id, payload))

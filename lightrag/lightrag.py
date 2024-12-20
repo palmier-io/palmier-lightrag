@@ -45,7 +45,7 @@ from .chunking import (
     should_ignore_file,
 )
 
-from .palmier.tree import (
+from .palmier.summaries import (
     update_summary,
 )
 
@@ -741,6 +741,7 @@ class LightRAG:
                 self.relationships_vdb,
                 self.summaries_vdb,
                 self.text_chunks,
+                self.chunks_vdb,
                 param,
                 asdict(self),
                 hashing_kv=self.llm_response_cache,

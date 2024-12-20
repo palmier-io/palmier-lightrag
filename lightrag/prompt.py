@@ -18,6 +18,7 @@ PROMPTS["DEFAULT_ENTITY_TYPES"] = [
     "library",
     "constant",
     "interface",
+    "file",
 ]
 
 PROMPTS["entity_extraction"] = """-Goal-
@@ -205,18 +206,32 @@ Add sections and commentary to the response as appropriate for the length and fo
 
 PROMPTS["keywords_extraction"] = """---Role---
 
-You are a helpful assistant tasked with identifying both high-level and low-level keywords in the user's query.
+You are a helpful assistant tasked with analyzing queries and extracting various types of keywords and search parameters.
 
 ---Goal---
 
-Given the query and document summaries, list both high-level and low-level keywords. High-level keywords focus on overarching concepts or themes, while low-level keywords focus on specific entities, details, or concrete terms.
+Given the query and top k relevant document summaries, analyze the query to extract multiple types of information to help with code search and understanding.
 
 ---Instructions---
 
-- Output the keywords in JSON format.
-- The JSON should have two keys:
-  - "high_level_keywords" for overarching concepts or themes.
-  - "low_level_keywords" for specific entities or details.
+First, let's break down the analysis process:
+1. Understand the main intent of the query
+2. Identify the technical domain or context
+3. Look for specific technical components mentioned
+4. Review the provided document summaries to find:
+   - Related components or functionality
+   - Similar patterns or implementations
+   - Supporting evidence for the query's context
+5. Consider related files and components that might be relevant
+6. Think about how to expand or refine the query for better search results
+
+Then, analyze the query through these steps and output the analysis in JSON format with the following keys:
+- "thought_process": List of reasoning steps that led to your analysis, including insights from document summaries and how you got the answers
+- "high_level_keywords": List of overarching concepts, technical patterns, or architectural themes
+- "low_level_keywords": List of specific functions, classes, variables, and technical details
+- "file_paths": List of potential file paths or patterns to search for (can include partial paths)
+- "symbol_names": List of specific code symbols like function names, class names, or variable names that are relevant to the query
+- "refined_queries": List of semantic search queries that could help find relevant information, each query should ask for different information
 
 ######################
 -Examples-
@@ -238,32 +253,74 @@ Output:
 PROMPTS["keywords_extraction_examples"] = [
     """Example 1:
 
-Query: "How does the Observer design pattern facilitate decoupled communication between objects in software engineering?"
+Query: "How does the AuthService handle user authentication in the login process?"
+Document summaries:
+- auth/service.py: Implements the AuthService class with user authentication and token management.
+- models/user.py: Contains User model with password hashing and verification methods.
 ################
 Output:
-{{
-  "high_level_keywords": ["Observer design pattern", "Decoupled communication", "Software engineering"],
-  "low_level_keywords": ["Subject", "Observer", "Event handling", "Publish-subscribe", "Design patterns"]
-}}
+{
+  "thought_process": [
+    "1. The query is about authentication implementation details",
+    "2. It specifically focuses on the AuthService component and login process",
+    "3. This likely involves user credentials, token management, and security",
+    "4. From summaries: AuthService is implemented in auth/service.py",
+    "5. From summaries: User authentication involves password verification from models/user.py",
+    "6. Need to look for both high-level auth flow and specific implementation details"
+  ],
+  "high_level_keywords": ["Authentication", "Login process", "Security"],
+  "low_level_keywords": ["User credentials", "Token generation", "Password verification", "Session management"],
+  "file_paths": ["auth/service.py", "models/user.py", "auth/", "services/auth", "login/"],
+  "symbol_names": ["AuthService", "authenticate", "login", "verify_password", "TokenGenerator", "User"],
+  "refined_queries": [
+    "AuthService authentication implementation",
+    "login process flow AuthService",
+    "user credential verification AuthService",
+    "password verification User model authentication"
+  ]
+}
 #############################""",
     """Example 2:
 
-Query: "What are the performance implications of using recursion versus iteration in algorithm implementation?"
+Query: "How many model providers are supported?"
 ################
 Output:
 {{
-  "high_level_keywords": ["Performance implications", "Recursion", "Iteration", "Algorithm implementation"],
-  "low_level_keywords": ["Call stack", "Memory usage", "Loop constructs", "Tail recursion", "Execution time"]
-}}
-#############################""",
-    """Example 3:
-
-Query: "How does garbage collection work in managed programming languages like Java and C#?"
-################
-Output:
-{{
-  "high_level_keywords": ["Garbage collection", "Managed programming languages", "Memory management"],
-  "low_level_keywords": ["Java", "C#", "Heap allocation", "Automatic memory deallocation", "Garbage collector algorithms"]
+  "thought_process": [
+    "1. Query asks about supported model providers in the framework",
+    "2. Need to analyze summaries to identify different model integrations",
+    "3. Found multiple providers mentioned across different files",
+    "4. Examples directory shows various implementations",
+    "5. Looking at llm.py and example files for supported integrations",
+    "6. Document summaries reveal integration with multiple cloud and open-source providers"
+  ],
+  "high_level_keywords": ["Model providers", "Language models", "API integration", "Model deployment"],
+  "low_level_keywords": [
+    "OpenAI compatible",
+    "Ollama",
+    "LMDeploy",
+    "Azure OpenAI",
+    "Amazon Bedrock",
+  ],
+  "file_paths": [
+    "lightrag/llm.py",
+    "examples/lightrag_api_openai_compatible_demo.py",
+    "examples/lightrag_lmdeploy_demo.py",
+    "examples/lightrag_api_open_webui_demo.py"
+  ],
+  "symbol_names": [
+    "openai_complete_if_cache",
+    "ollama_model_complete",
+    "lmdeploy_model_complete",
+    "embedding_func",
+    "llm_model_func"
+  ],
+  "refined_queries": [
+    "List all supported model providers in lightrag",
+    "How to integrate different LLM providers",
+    "What are the available model deployment options",
+    "Supported embedding model providers"
+  ]
 }}
 #############################""",
 ]

@@ -540,6 +540,7 @@ async def kg_query(
     relationships_vdb: BaseVectorStorage,
     summaries_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
+    chunks_vdb: BaseVectorStorage,
     query_param: QueryParam,
     global_config: dict,
     hashing_kv: BaseKVStorage = None,
@@ -571,13 +572,15 @@ async def kg_query(
         logger.error(f"Unknown mode {query_param.mode} in kg_query")
         return PROMPTS["fail_response"]
 
-    # Get relevant summaries
     query_chunks = chunking_by_token_size(
         query,
         overlap_token_size=global_config["chunk_overlap_token_size"],
         max_token_size=8192, # limit for text-embedding-3-small
         tiktoken_model=global_config["tiktoken_model_name"],
     )
+
+    # Get relevant summaries
+    logger.info(f"Querying relevant file summaries")
     summaries = await asyncio.gather(
         *[
             summaries_vdb.query(chunk["content"], top_k=query_param.top_k)
@@ -612,18 +615,24 @@ async def kg_query(
         language=language,
         summary_context=summary_context,
     )
-    result = await use_model_func(kw_prompt, keyword_extraction=True)
+    logger.info("Analyzing query and generating search parameters")
+    reasoning_result = await use_model_func(kw_prompt, keyword_extraction=True)
     logger.info("kw_prompt result:")
-    print(result)
+    print(reasoning_result)
     try:
         # json_text = locate_json_string_body_from_string(result) # handled in use_model_func
-        match = re.search(r"\{.*\}", result, re.DOTALL)
+        match = re.search(r"\{.*\}", reasoning_result, re.DOTALL)
         if match:
             result = match.group(0)
             keywords_data = json.loads(result)
 
             hl_keywords = keywords_data.get("high_level_keywords", [])
             ll_keywords = keywords_data.get("low_level_keywords", [])
+            file_paths = keywords_data.get("file_paths", [])
+            symbol_names = keywords_data.get("symbol_names", [])
+            refined_queries = keywords_data.get("refined_queries", [])
+
+
         else:
             logger.error("No JSON-like structure found in the result.")
             return PROMPTS["fail_response"]
@@ -648,6 +657,24 @@ async def kg_query(
     else:
         hl_keywords = ", ".join(hl_keywords)
 
+    # Naive semantic search
+    if query_param.mode in ["hybrid"]:
+        logger.info(f"Querying direct semantic chunks using refined queries")
+        naive_chunks_vector = await asyncio.gather(
+            *[chunks_vdb.query(refined_query, top_k=query_param.top_k) for refined_query in refined_queries]
+        )
+        naive_chunks_vector = [item for sublist in naive_chunks_vector for item in sublist]
+        naive_chunks_list = [["id", "content", "file_path", "start_line", "end_line"]]
+        chunks = await asyncio.gather(*[text_chunks_db.get_by_id(t["id"]) for t in naive_chunks_vector])
+
+        naive_chunks_list.extend(
+            [i, chunk["content"], chunk["file_path"], chunk["start"]["line"], chunk["end"]["line"]]
+            for i, chunk in enumerate(chunks)
+        )
+        naive_chunks = list_of_list_to_csv(naive_chunks_list)
+    else:
+        naive_chunks = []
+
     # Build context
     keywords = [ll_keywords, hl_keywords]
 
@@ -659,6 +686,7 @@ async def kg_query(
         text_chunks_db,
         query_param,
         summary_context,
+        naive_chunks,
     )
 
     if query_param.only_need_context:
@@ -713,6 +741,7 @@ async def _build_query_context(
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
     summary_context: str,
+    naive_chunks: str,
 ):
     ll_kewwords, hl_keywrds = query[0], query[1]
     if query_param.mode in ["local", "hybrid"]:
@@ -765,7 +794,7 @@ async def _build_query_context(
         entities_context, relations_context, text_units_context = combine_contexts(
             [hl_entities_context, ll_entities_context],
             [hl_relations_context, ll_relations_context],
-            [hl_text_units_context, ll_text_units_context],
+            [hl_text_units_context, ll_text_units_context, naive_chunks],
         )
     elif query_param.mode == "local":
         entities_context, relations_context, text_units_context = (
@@ -1167,7 +1196,7 @@ def combine_contexts(entities, relationships, sources):
     # Function to extract entities, relationships, and sources from context strings
     hl_entities, ll_entities = entities[0], entities[1]
     hl_relationships, ll_relationships = relationships[0], relationships[1]
-    hl_sources, ll_sources = sources[0], sources[1]
+    hl_sources, ll_sources, naive_sources = sources[0], sources[1], sources[2]
     # Combine and deduplicate the entities
     combined_entities = process_combine_contexts(hl_entities, ll_entities)
 
@@ -1178,6 +1207,7 @@ def combine_contexts(entities, relationships, sources):
 
     # Combine and deduplicate the sources
     combined_sources = process_combine_contexts(hl_sources, ll_sources)
+    combined_sources = process_combine_contexts(combined_sources, naive_sources)
 
     return combined_entities, combined_relationships, combined_sources
 
