@@ -28,6 +28,7 @@ from .base import (
     BaseVectorStorage,
     TextChunkSchema,
     QueryParam,
+    QueryResult,
 )
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
 
@@ -544,9 +545,9 @@ async def kg_query(
     query_param: QueryParam,
     global_config: dict,
     hashing_kv: BaseKVStorage = None,
-) -> str:
+) -> QueryResult:
     if query.strip() == "":
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
     # Handle cache
     use_model_func = global_config["llm_model_func"]
     args_hash = compute_args_hash(query_param.mode, query)
@@ -554,7 +555,7 @@ async def kg_query(
         hashing_kv, args_hash, query, query_param.mode
     )
     if cached_response is not None:
-        return cached_response
+        return QueryResult(answer=cached_response)
 
     example_number = global_config["addon_params"].get("example_number", None)
     if example_number and example_number < len(PROMPTS["keywords_extraction_examples"]):
@@ -570,17 +571,17 @@ async def kg_query(
     # Set mode
     if query_param.mode not in ["local", "global", "hybrid"]:
         logger.error(f"Unknown mode {query_param.mode} in kg_query")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
 
     query_chunks = chunking_by_token_size(
         query,
         overlap_token_size=global_config["chunk_overlap_token_size"],
-        max_token_size=8192, # limit for text-embedding-3-small
+        max_token_size=8192,  # limit for text-embedding-3-small
         tiktoken_model=global_config["tiktoken_model_name"],
     )
 
     # Get relevant summaries
-    logger.info(f"Querying relevant file summaries")
+    logger.info("Querying relevant file summaries")
     summaries = await asyncio.gather(
         *[
             summaries_vdb.query(chunk["content"], top_k=query_param.top_k)
@@ -632,43 +633,55 @@ async def kg_query(
             symbol_names = keywords_data.get("symbol_names", [])
             refined_queries = keywords_data.get("refined_queries", [])
 
-
         else:
             logger.error("No JSON-like structure found in the result.")
-            return PROMPTS["fail_response"]
+            return QueryResult(answer=PROMPTS["fail_response"])
 
     # Handle parsing error
     except json.JSONDecodeError as e:
         print(f"JSON parsing error: {e} {result}")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
 
     # Handdle keywords missing
     if hl_keywords == [] and ll_keywords == []:
         logger.warning("low_level_keywords and high_level_keywords is empty")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
     if ll_keywords == [] and query_param.mode in ["local", "hybrid"]:
         logger.warning("low_level_keywords is empty")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
     else:
         ll_keywords = ", ".join(ll_keywords)
     if hl_keywords == [] and query_param.mode in ["global", "hybrid"]:
         logger.warning("high_level_keywords is empty")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
     else:
         hl_keywords = ", ".join(hl_keywords)
 
     # Naive semantic search
     if query_param.mode in ["hybrid"]:
-        logger.info(f"Querying direct semantic chunks using refined queries")
+        logger.info("Querying direct semantic chunks using refined queries")
         naive_chunks_vector = await asyncio.gather(
-            *[chunks_vdb.query(refined_query, top_k=query_param.top_k) for refined_query in refined_queries]
+            *[
+                chunks_vdb.query(refined_query, top_k=query_param.top_k)
+                for refined_query in refined_queries
+            ]
         )
-        naive_chunks_vector = [item for sublist in naive_chunks_vector for item in sublist]
+        naive_chunks_vector = [
+            item for sublist in naive_chunks_vector for item in sublist
+        ]
         naive_chunks_list = [["id", "content", "file_path", "start_line", "end_line"]]
-        chunks = await asyncio.gather(*[text_chunks_db.get_by_id(t["id"]) for t in naive_chunks_vector])
+        chunks = await asyncio.gather(
+            *[text_chunks_db.get_by_id(t["id"]) for t in naive_chunks_vector]
+        )
 
         naive_chunks_list.extend(
-            [i, chunk["content"], chunk["file_path"], chunk["start"]["line"], chunk["end"]["line"]]
+            [
+                i,
+                chunk["content"],
+                chunk["file_path"],
+                chunk["start"]["line"],
+                chunk["end"]["line"],
+            ]
             for i, chunk in enumerate(chunks)
         )
         naive_chunks = list_of_list_to_csv(naive_chunks_list)
@@ -688,11 +701,11 @@ async def kg_query(
         summary_context,
         naive_chunks,
     )
-
+    reasoning = reasoning_result if query_param.include_reasoning else None
     if query_param.only_need_context:
-        return context
+        return QueryResult(context=context, reasoning=reasoning)
     if context is None:
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
     sys_prompt_temp = PROMPTS["rag_response"]
     sys_prompt = sys_prompt_temp.format(
         context_data=context,
@@ -700,7 +713,7 @@ async def kg_query(
         repository_name=global_config.get("repository_name"),
     )
     if query_param.only_need_prompt:
-        return sys_prompt
+        return QueryResult(answer=sys_prompt, reasoning=reasoning)
     response = await use_model_func(
         query,
         system_prompt=sys_prompt,
@@ -730,7 +743,7 @@ async def kg_query(
             mode=query_param.mode,
         ),
     )
-    return response
+    return QueryResult(answer=response, reasoning=reasoning)
 
 
 async def _build_query_context(
@@ -1219,7 +1232,7 @@ async def naive_query(
     query_param: QueryParam,
     global_config: dict,
     hashing_kv: BaseKVStorage = None,
-):
+) -> QueryResult:
     # Handle cache
     use_model_func = global_config["llm_model_func"]
     args_hash = compute_args_hash(query_param.mode, query)
@@ -1227,11 +1240,11 @@ async def naive_query(
         hashing_kv, args_hash, query, query_param.mode
     )
     if cached_response is not None:
-        return cached_response
+        return QueryResult(answer=cached_response)
 
     results = await chunks_vdb.query(query, top_k=query_param.top_k)
     if not len(results):
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
 
     chunks_ids = [r["id"] for r in results]
     chunks = await text_chunks_db.get_by_ids(chunks_ids)
@@ -1243,7 +1256,7 @@ async def naive_query(
 
     if not valid_chunks:
         logger.warning("No valid chunks found after filtering")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
 
     maybe_trun_chunks = truncate_list_by_token_size(
         valid_chunks,
@@ -1253,13 +1266,13 @@ async def naive_query(
 
     if not maybe_trun_chunks:
         logger.warning("No chunks left after truncation")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
 
     logger.info(f"Truncate {len(chunks)} to {len(maybe_trun_chunks)} chunks")
     section = "\n--New Chunk--\n".join([c["content"] for c in maybe_trun_chunks])
 
     if query_param.only_need_context:
-        return section
+        return QueryResult(context=section)
 
     sys_prompt_temp = PROMPTS["naive_rag_response"]
     sys_prompt = sys_prompt_temp.format(
@@ -1267,7 +1280,7 @@ async def naive_query(
     )
 
     if query_param.only_need_prompt:
-        return sys_prompt
+        return QueryResult(answer=sys_prompt)
 
     response = await use_model_func(
         query,
@@ -1300,4 +1313,4 @@ async def naive_query(
         ),
     )
 
-    return response
+    return QueryResult(answer=response)

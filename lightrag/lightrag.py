@@ -30,6 +30,7 @@ from .base import (
     BaseGraphStorage,
     StorageNameSpace,
     QueryParam,
+    QueryResult,
 )
 
 from .storage import (
@@ -728,11 +729,11 @@ class LightRAG:
             if update_storage:
                 await self._insert_done()
 
-    def query(self, query: str, param: QueryParam = QueryParam()):
+    def query(self, query: str, param: QueryParam = QueryParam()) -> QueryResult:
         loop = always_get_an_event_loop()
         return loop.run_until_complete(self.aquery(query, param))
 
-    async def aquery(self, query: str, param: QueryParam = QueryParam()):
+    async def aquery(self, query: str, param: QueryParam = QueryParam()) -> QueryResult:
         if param.mode in ["local", "global", "hybrid"]:
             response = await kg_query(
                 query,
