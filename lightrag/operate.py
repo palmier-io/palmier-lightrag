@@ -629,9 +629,6 @@ async def kg_query(
 
             hl_keywords = keywords_data.get("high_level_keywords", [])
             ll_keywords = keywords_data.get("low_level_keywords", [])
-            file_paths = keywords_data.get("file_paths", [])
-            symbol_names = keywords_data.get("symbol_names", [])
-            refined_queries = keywords_data.get("refined_queries", [])
 
         else:
             logger.error("No JSON-like structure found in the result.")
@@ -657,39 +654,12 @@ async def kg_query(
     else:
         hl_keywords = ", ".join(hl_keywords)
 
-    # Naive semantic search
-    if query_param.mode in ["hybrid"]:
-        logger.info("Querying direct semantic chunks using refined queries")
-        naive_chunks_vector = await asyncio.gather(
-            *[
-                chunks_vdb.query(refined_query, top_k=query_param.top_k)
-                for refined_query in refined_queries
-            ]
-        )
-        naive_chunks_vector = [
-            item for sublist in naive_chunks_vector for item in sublist
-        ]
-        naive_chunks_list = [["id", "content", "file_path", "start_line", "end_line"]]
-        chunks = await asyncio.gather(
-            *[text_chunks_db.get_by_id(t["id"]) for t in naive_chunks_vector]
-        )
-
-        naive_chunks_list.extend(
-            [
-                i,
-                chunk["content"],
-                chunk["file_path"],
-                chunk["start"]["line"],
-                chunk["end"]["line"],
-            ]
-            for i, chunk in enumerate(chunks)
-        )
-        naive_chunks = list_of_list_to_csv(naive_chunks_list)
-    else:
-        naive_chunks = []
-
     # Build context
     keywords = [ll_keywords, hl_keywords]
+
+    chunks_csv = await _get_chunks_from_keywords(
+        keywords_data, text_chunks_db, chunks_vdb, query_param
+    )
 
     context = await _build_query_context(
         keywords,
@@ -699,7 +669,7 @@ async def kg_query(
         text_chunks_db,
         query_param,
         summary_context,
-        naive_chunks,
+        chunks_csv,
     )
     reasoning = reasoning_result if query_param.include_reasoning else None
     if query_param.only_need_context:
@@ -746,6 +716,65 @@ async def kg_query(
     return QueryResult(answer=response, reasoning=reasoning)
 
 
+async def _get_chunks_from_keywords(
+    keywords_data: dict,
+    text_chunks_db: BaseKVStorage[TextChunkSchema],
+    chunks_vdb: BaseVectorStorage,
+    query_param: QueryParam,
+) -> str:
+    """
+    Get chunks using different search parameters and methods:
+    - file_path: Given a list of file paths, get all chunks that match any of the file paths
+    - refined_queries: Given a list of refined queries, query the vector database for chunks
+    - symbol_names: Given a list of symbol names, get all chunks that match any of the symbol names
+    """
+    file_paths = keywords_data.get("file_paths", [])
+    refined_queries = keywords_data.get("refined_queries", [])
+    # symbol_names = keywords_data.get("symbol_names", [])
+
+    chunks_vector = await asyncio.gather(
+        *[
+            chunks_vdb.query(refined_query, top_k=query_param.top_k)
+            for refined_query in refined_queries
+        ]
+    )
+    chunks_vector = [item for sublist in chunks_vector for item in sublist]
+    chunks_list = [["id", "content", "file_path", "start_line", "end_line"]]
+    chunks = await asyncio.gather(
+        *[text_chunks_db.get_by_id(t["id"]) for t in chunks_vector]
+    )
+    logger.info(
+        f"Chunk retrieval using refined queries uses {len(chunks_vector)} text units"
+    )
+
+    chunks_list.extend(
+        [
+            i,
+            chunk["content"],
+            chunk["file_path"],
+            chunk["start"]["line"],
+            chunk["end"]["line"],
+        ]
+        for i, chunk in enumerate(chunks)
+    )
+
+    file_chunks = await text_chunks_db.get_by_field("file_path", file_paths)
+    chunks_list.extend(
+        [
+            i,
+            chunk["content"],
+            chunk["file_path"],
+            chunk["start"]["line"],
+            chunk["end"]["line"],
+        ]
+        for i, chunk in enumerate(file_chunks)
+    )
+    logger.info(f"File chunk query uses {len(file_chunks)} text units")
+
+    chunks_csv = list_of_list_to_csv(chunks_list)
+    return chunks_csv
+
+
 async def _build_query_context(
     query: list,
     knowledge_graph_inst: BaseGraphStorage,
@@ -754,7 +783,7 @@ async def _build_query_context(
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     query_param: QueryParam,
     summary_context: str,
-    naive_chunks: str,
+    chunks_csv: str,
 ):
     ll_kewwords, hl_keywrds = query[0], query[1]
     if query_param.mode in ["local", "hybrid"]:
@@ -807,7 +836,7 @@ async def _build_query_context(
         entities_context, relations_context, text_units_context = combine_contexts(
             [hl_entities_context, ll_entities_context],
             [hl_relations_context, ll_relations_context],
-            [hl_text_units_context, ll_text_units_context, naive_chunks],
+            [hl_text_units_context, ll_text_units_context, chunks_csv],
         )
     elif query_param.mode == "local":
         entities_context, relations_context, text_units_context = (

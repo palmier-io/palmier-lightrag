@@ -54,13 +54,16 @@ class JsonKVStorage(BaseKVStorage):
             for id in ids
         ]
 
-    async def get_by_field(self, field: str, values: list) -> dict[str, dict]:
+    async def get_by_field(self, field: str, values: list) -> list[dict]:
         values_set = set(values)  # Convert to set for O(1) lookup
-        return {
-            doc_id: doc
+        return [
+            {
+                "id": doc_id,
+                **doc,
+            }
             for doc_id, doc in self._data.items()
             if doc.get(field) in values_set
-        }
+        ]
 
     async def filter_keys(self, data: list[str]) -> set[str]:
         return set([s for s in data if s not in self._data])

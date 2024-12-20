@@ -119,18 +119,19 @@ class S3DocsStorage(BaseKVStorage):
         return results
 
     @db_retry
-    async def get_by_field(self, field: str, values: list[str]) -> dict[str, dict]:
+    async def get_by_field(self, field: str, values: list[str]) -> list[dict]:
         """Get items by field value"""
         # Note: This is inefficient for S3 as we need to scan all objects
         # Consider using a secondary index or different storage for this use case
         all_keys = await self.all_keys()
-        result = {}
+        result = []
         values_set = set(values)
 
         for key in all_keys:
             item = await self.get_by_id(key)
             if item and item.get(field) in values_set:
-                result[key] = item
+                item["id"] = key
+                result.append(item)
 
         return result
 

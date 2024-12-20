@@ -32,6 +32,7 @@ class QueryParam:
     # Number of tokens for the entity descriptions
     max_token_for_local_context: int = 4000
 
+
 @dataclass
 class QueryResult:
     answer: Optional[str] = None
