@@ -20,7 +20,6 @@ pyvis
 qdrant-client
 supabase
 tenacity
-thefuzz
 # lmdeploy[all]
 
 # LLM packages
