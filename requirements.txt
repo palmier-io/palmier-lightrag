@@ -20,6 +20,7 @@ pyvis
 qdrant-client
 supabase
 tenacity
+thefuzz
 # lmdeploy[all]
 
 # LLM packages
@@ -29,4 +30,4 @@ transformers
 tree-sitter==0.21.3
 tree_sitter_languages==1.10.2
 xxhash
-thefuzz
+voyageai

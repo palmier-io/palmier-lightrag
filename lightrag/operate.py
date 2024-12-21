@@ -13,6 +13,7 @@ from .utils import (
     encode_string_by_tiktoken,
     is_float_regex,
     list_of_list_to_csv,
+    csv_string_to_list,
     pack_user_ass_to_openai_messages,
     split_string_by_multi_markers,
     truncate_list_by_token_size,
@@ -30,6 +31,8 @@ from .base import (
     QueryParam,
     QueryResult,
 )
+
+from .llm import voyageai_rerank
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
 
 
@@ -542,6 +545,7 @@ async def kg_query(
     summaries_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     chunks_vdb: BaseVectorStorage,
+    full_docs: BaseKVStorage,
     query_param: QueryParam,
     global_config: dict,
     hashing_kv: BaseKVStorage = None,
@@ -573,40 +577,7 @@ async def kg_query(
         logger.error(f"Unknown mode {query_param.mode} in kg_query")
         return QueryResult(answer=PROMPTS["fail_response"])
 
-    query_chunks = chunking_by_token_size(
-        query,
-        overlap_token_size=global_config["chunk_overlap_token_size"],
-        max_token_size=8192,  # limit for text-embedding-3-small
-        tiktoken_model=global_config["tiktoken_model_name"],
-    )
-
-    # Get relevant summaries
-    logger.info("Querying relevant file summaries")
-    summaries = await asyncio.gather(
-        *[
-            summaries_vdb.query(chunk["content"], top_k=query_param.top_k)
-            for chunk in query_chunks
-        ]
-    )
-    summaries = [item for sublist in summaries for item in sublist]
-    summary_context = [["id", "level", "file_path", "score", "content"]]
-    seen_file_paths = set()
-
-    for i, s in enumerate(summaries):
-        file_path = s["file_path"]
-        if file_path in seen_file_paths:
-            continue
-        seen_file_paths.add(file_path)
-        summary_context.append(
-            [
-                i,
-                s["type"],
-                file_path,
-                s["score"],
-                s["content"],
-            ]
-        )
-    summary_context = list_of_list_to_csv(summary_context)
+    summary_csv = await _get_summaries_from_query(query, summaries_vdb, query_param, global_config)
 
     # LLM generate keywords
     kw_prompt_temp = PROMPTS["keywords_extraction"]
@@ -614,7 +585,7 @@ async def kg_query(
         query=query,
         examples=examples,
         language=language,
-        summary_context=summary_context,
+        summary_context=summary_csv,
     )
     logger.info("Analyzing query and generating search parameters")
     reasoning_result = await use_model_func(kw_prompt, keyword_extraction=True)
@@ -662,13 +633,15 @@ async def kg_query(
     )
 
     context = await _build_query_context(
+        query,
         keywords,
         knowledge_graph_inst,
         entities_vdb,
         relationships_vdb,
         text_chunks_db,
+        full_docs,
         query_param,
-        summary_context,
+        summary_csv,
         chunks_csv,
     )
     reasoning = reasoning_result if query_param.include_reasoning else None
@@ -715,6 +688,46 @@ async def kg_query(
     )
     return QueryResult(answer=response, reasoning=reasoning)
 
+async def _get_summaries_from_query(
+    query: str,
+    summaries_vdb: BaseVectorStorage,
+    query_param: QueryParam,
+    global_config: dict,
+) -> str:
+    """ Based on the query, retrieve top k summaries from the vector database """
+    query_chunks = chunking_by_token_size(
+        query,
+        overlap_token_size=global_config["chunk_overlap_token_size"],
+        max_token_size=8192,  # limit for text-embedding-3-small
+        tiktoken_model=global_config["tiktoken_model_name"],
+    )
+
+    summaries = await asyncio.gather(
+        *[
+            summaries_vdb.query(chunk["content"], top_k=query_param.top_k)
+            for chunk in query_chunks
+        ]
+    )
+    summaries = [item for sublist in summaries for item in sublist]
+    summary_context = [["id", "level", "file_path", "score", "content"]]
+    seen_file_paths = set()
+
+    for i, s in enumerate(summaries):
+        file_path = s["file_path"]
+        if file_path in seen_file_paths:
+            continue
+        seen_file_paths.add(file_path)
+        summary_context.append(
+            [
+                i,
+                s["type"],
+                file_path,
+                s["score"],
+                s["content"],
+            ]
+        )
+    logger.info(f"Retrieved {len(summaries)} relevant summaries")
+    return list_of_list_to_csv(summary_context)
 
 async def _get_chunks_from_keywords(
     keywords_data: dict,
@@ -776,18 +789,20 @@ async def _get_chunks_from_keywords(
 
 
 async def _build_query_context(
-    query: list,
+    query: str,
+    keywords: list,
     knowledge_graph_inst: BaseGraphStorage,
     entities_vdb: BaseVectorStorage,
     relationships_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
+    full_docs: BaseKVStorage,
     query_param: QueryParam,
-    summary_context: str,
+    summary_csv: str,
     chunks_csv: str,
 ):
-    ll_kewwords, hl_keywrds = query[0], query[1]
+    ll_keywords, hl_keywords = keywords[0], keywords[1]
     if query_param.mode in ["local", "hybrid"]:
-        if ll_kewwords == "":
+        if ll_keywords == "":
             ll_entities_context, ll_relations_context, ll_text_units_context = (
                 "",
                 "",
@@ -803,14 +818,14 @@ async def _build_query_context(
                 ll_relations_context,
                 ll_text_units_context,
             ) = await _get_node_data(
-                ll_kewwords,
+                ll_keywords,
                 knowledge_graph_inst,
                 entities_vdb,
                 text_chunks_db,
                 query_param,
             )
     if query_param.mode in ["global", "hybrid"]:
-        if hl_keywrds == "":
+        if hl_keywords == "":
             hl_entities_context, hl_relations_context, hl_text_units_context = (
                 "",
                 "",
@@ -826,7 +841,7 @@ async def _build_query_context(
                 hl_relations_context,
                 hl_text_units_context,
             ) = await _get_edge_data(
-                hl_keywrds,
+                hl_keywords,
                 knowledge_graph_inst,
                 relationships_vdb,
                 text_chunks_db,
@@ -850,10 +865,22 @@ async def _build_query_context(
             hl_relations_context,
             hl_text_units_context,
         )
+
+    if query_param.include_full_file:
+        text_units_context_list = csv_string_to_list(text_units_context)[1:]
+        file_paths = set([s[2] for s in text_units_context_list])
+        for file_path in file_paths:
+            print(file_path)
+        docs = await full_docs.get_by_field("file_path", list(file_paths))
+        docs_list = [["id", "file_path", "content"]]
+        docs_list.extend([[i, d["file_path"], d["content"]] for i, d in enumerate(docs)])
+        text_units_context = list_of_list_to_csv(docs_list)
+        logger.info(f"Converted {len(text_units_context_list)} text units to {len(docs)} full files")
+
     return f"""
 -----Summaries-----
 ```csv
-{summary_context}
+{summary_csv}
 ```
 -----Entities-----
 ```csv

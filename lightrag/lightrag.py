@@ -745,6 +745,7 @@ class LightRAG:
                 self.summaries_vdb,
                 self.text_chunks,
                 self.chunks_vdb,
+                self.full_docs,
                 param,
                 asdict(self),
                 hashing_kv=self.llm_response_cache,
