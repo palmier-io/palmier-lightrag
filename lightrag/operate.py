@@ -32,7 +32,6 @@ from .base import (
     QueryResult,
 )
 
-from .llm import voyageai_rerank
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
 
 
@@ -577,7 +576,9 @@ async def kg_query(
         logger.error(f"Unknown mode {query_param.mode} in kg_query")
         return QueryResult(answer=PROMPTS["fail_response"])
 
-    summary_csv = await _get_summaries_from_query(query, summaries_vdb, query_param, global_config)
+    summary_csv = await _get_summaries_from_query(
+        query, summaries_vdb, query_param, global_config
+    )
 
     # LLM generate keywords
     kw_prompt_temp = PROMPTS["keywords_extraction"]
@@ -688,13 +689,14 @@ async def kg_query(
     )
     return QueryResult(answer=response, reasoning=reasoning)
 
+
 async def _get_summaries_from_query(
     query: str,
     summaries_vdb: BaseVectorStorage,
     query_param: QueryParam,
     global_config: dict,
 ) -> str:
-    """ Based on the query, retrieve top k summaries from the vector database """
+    """Based on the query, retrieve top k summaries from the vector database"""
     query_chunks = chunking_by_token_size(
         query,
         overlap_token_size=global_config["chunk_overlap_token_size"],
@@ -728,6 +730,7 @@ async def _get_summaries_from_query(
         )
     logger.info(f"Retrieved {len(summaries)} relevant summaries")
     return list_of_list_to_csv(summary_context)
+
 
 async def _get_chunks_from_keywords(
     keywords_data: dict,
@@ -873,9 +876,13 @@ async def _build_query_context(
             print(file_path)
         docs = await full_docs.get_by_field("file_path", list(file_paths))
         docs_list = [["id", "file_path", "content"]]
-        docs_list.extend([[i, d["file_path"], d["content"]] for i, d in enumerate(docs)])
+        docs_list.extend(
+            [[i, d["file_path"], d["content"]] for i, d in enumerate(docs)]
+        )
         text_units_context = list_of_list_to_csv(docs_list)
-        logger.info(f"Converted {len(text_units_context_list)} text units to {len(docs)} full files")
+        logger.info(
+            f"Converted {len(text_units_context_list)} text units to {len(docs)} full files"
+        )
 
     return f"""
 -----Summaries-----

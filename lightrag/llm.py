@@ -927,10 +927,14 @@ async def ollama_embed(texts: list[str], embed_model, **kwargs) -> np.ndarray:
     data = ollama_client.embed(model=embed_model, input=texts)
     return data["embeddings"]
 
-async def voyageai_rerank(query: str, documents: list[str], model: str = "rerank-2", top_k: int = 10) -> list[dict]:
+
+async def voyageai_rerank(
+    query: str, documents: list[str], model: str = "rerank-2", top_k: int = 10
+) -> list[dict]:
     client = voyageai.Client()
     reranking = client.rerank(query, documents, model=model, top_k=top_k)
     return reranking.results
+
 
 class Model(BaseModel):
     """
