@@ -13,6 +13,7 @@ from .utils import (
     encode_string_by_tiktoken,
     is_float_regex,
     list_of_list_to_csv,
+    csv_string_to_list,
     pack_user_ass_to_openai_messages,
     split_string_by_multi_markers,
     truncate_list_by_token_size,
@@ -28,7 +29,9 @@ from .base import (
     BaseVectorStorage,
     TextChunkSchema,
     QueryParam,
+    QueryResult,
 )
+
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
 
 
@@ -540,12 +543,14 @@ async def kg_query(
     relationships_vdb: BaseVectorStorage,
     summaries_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
+    chunks_vdb: BaseVectorStorage,
+    full_docs: BaseKVStorage,
     query_param: QueryParam,
     global_config: dict,
     hashing_kv: BaseKVStorage = None,
-) -> str:
+) -> QueryResult:
     if query.strip() == "":
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
     # Handle cache
     use_model_func = global_config["llm_model_func"]
     args_hash = compute_args_hash(query_param.mode, query)
@@ -553,7 +558,7 @@ async def kg_query(
         hashing_kv, args_hash, query, query_param.mode
     )
     if cached_response is not None:
-        return cached_response
+        return QueryResult(answer=cached_response)
 
     example_number = global_config["addon_params"].get("example_number", None)
     if example_number and example_number < len(PROMPTS["keywords_extraction_examples"]):
@@ -569,40 +574,11 @@ async def kg_query(
     # Set mode
     if query_param.mode not in ["local", "global", "hybrid"]:
         logger.error(f"Unknown mode {query_param.mode} in kg_query")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
 
-    # Get relevant summaries
-    query_chunks = chunking_by_token_size(
-        query,
-        overlap_token_size=global_config["chunk_overlap_token_size"],
-        max_token_size=8192, # limit for text-embedding-3-small
-        tiktoken_model=global_config["tiktoken_model_name"],
+    summary_csv = await _get_summaries_from_query(
+        query, summaries_vdb, query_param, global_config
     )
-    summaries = await asyncio.gather(
-        *[
-            summaries_vdb.query(chunk["content"], top_k=query_param.top_k)
-            for chunk in query_chunks
-        ]
-    )
-    summaries = [item for sublist in summaries for item in sublist]
-    summary_context = [["id", "level", "file_path", "score", "content"]]
-    seen_file_paths = set()
-
-    for i, s in enumerate(summaries):
-        file_path = s["file_path"]
-        if file_path in seen_file_paths:
-            continue
-        seen_file_paths.add(file_path)
-        summary_context.append(
-            [
-                i,
-                s["type"],
-                file_path,
-                s["score"],
-                s["content"],
-            ]
-        )
-    summary_context = list_of_list_to_csv(summary_context)
 
     # LLM generate keywords
     kw_prompt_temp = PROMPTS["keywords_extraction"]
@@ -610,61 +586,70 @@ async def kg_query(
         query=query,
         examples=examples,
         language=language,
-        summary_context=summary_context,
+        summary_context=summary_csv,
     )
-    result = await use_model_func(kw_prompt, keyword_extraction=True)
+    logger.info("Analyzing query and generating search parameters")
+    reasoning_result = await use_model_func(kw_prompt, keyword_extraction=True)
     logger.info("kw_prompt result:")
-    print(result)
+    print(reasoning_result)
     try:
         # json_text = locate_json_string_body_from_string(result) # handled in use_model_func
-        match = re.search(r"\{.*\}", result, re.DOTALL)
+        match = re.search(r"\{.*\}", reasoning_result, re.DOTALL)
         if match:
             result = match.group(0)
             keywords_data = json.loads(result)
 
             hl_keywords = keywords_data.get("high_level_keywords", [])
             ll_keywords = keywords_data.get("low_level_keywords", [])
+
         else:
             logger.error("No JSON-like structure found in the result.")
-            return PROMPTS["fail_response"]
+            return QueryResult(answer=PROMPTS["fail_response"])
 
     # Handle parsing error
     except json.JSONDecodeError as e:
         print(f"JSON parsing error: {e} {result}")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
 
     # Handdle keywords missing
     if hl_keywords == [] and ll_keywords == []:
         logger.warning("low_level_keywords and high_level_keywords is empty")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
     if ll_keywords == [] and query_param.mode in ["local", "hybrid"]:
         logger.warning("low_level_keywords is empty")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
     else:
         ll_keywords = ", ".join(ll_keywords)
     if hl_keywords == [] and query_param.mode in ["global", "hybrid"]:
         logger.warning("high_level_keywords is empty")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
     else:
         hl_keywords = ", ".join(hl_keywords)
 
     # Build context
     keywords = [ll_keywords, hl_keywords]
 
+    chunks_csv = await _get_chunks_from_keywords(
+        keywords_data, text_chunks_db, chunks_vdb, query_param
+    )
+
     context = await _build_query_context(
+        query,
         keywords,
         knowledge_graph_inst,
         entities_vdb,
         relationships_vdb,
         text_chunks_db,
+        full_docs,
         query_param,
-        summary_context,
+        summary_csv,
+        chunks_csv,
     )
-
+    reasoning = dict(keywords_data) if query_param.include_reasoning and keywords_data else None
     if query_param.only_need_context:
-        return context
+        return QueryResult(context=context, reasoning=reasoning)
     if context is None:
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
     sys_prompt_temp = PROMPTS["rag_response"]
     sys_prompt = sys_prompt_temp.format(
         context_data=context,
@@ -672,7 +657,7 @@ async def kg_query(
         repository_name=global_config.get("repository_name"),
     )
     if query_param.only_need_prompt:
-        return sys_prompt
+        return QueryResult(answer=sys_prompt, reasoning=reasoning)
     response = await use_model_func(
         query,
         system_prompt=sys_prompt,
@@ -702,21 +687,125 @@ async def kg_query(
             mode=query_param.mode,
         ),
     )
-    return response
+    return QueryResult(answer=response, reasoning=reasoning)
+
+
+async def _get_summaries_from_query(
+    query: str,
+    summaries_vdb: BaseVectorStorage,
+    query_param: QueryParam,
+    global_config: dict,
+) -> str:
+    """Based on the query, retrieve top k summaries from the vector database"""
+    query_chunks = chunking_by_token_size(
+        query,
+        overlap_token_size=global_config["chunk_overlap_token_size"],
+        max_token_size=8192,  # limit for text-embedding-3-small
+        tiktoken_model=global_config["tiktoken_model_name"],
+    )
+
+    summaries = await asyncio.gather(
+        *[
+            summaries_vdb.query(chunk["content"], top_k=query_param.top_k)
+            for chunk in query_chunks
+        ]
+    )
+    summaries = [item for sublist in summaries for item in sublist]
+    summary_context = [["id", "level", "file_path", "score", "content"]]
+    seen_file_paths = set()
+
+    for i, s in enumerate(summaries):
+        file_path = s["file_path"]
+        if file_path in seen_file_paths:
+            continue
+        seen_file_paths.add(file_path)
+        summary_context.append(
+            [
+                i,
+                s["type"],
+                file_path,
+                s["score"],
+                s["content"],
+            ]
+        )
+    logger.info(f"Retrieved {len(summaries)} relevant summaries")
+    return list_of_list_to_csv(summary_context)
+
+
+async def _get_chunks_from_keywords(
+    keywords_data: dict,
+    text_chunks_db: BaseKVStorage[TextChunkSchema],
+    chunks_vdb: BaseVectorStorage,
+    query_param: QueryParam,
+) -> str:
+    """
+    Get chunks using different search parameters and methods:
+    - file_path: Given a list of file paths, get all chunks that match any of the file paths
+    - refined_queries: Given a list of refined queries, query the vector database for chunks
+    - symbol_names: Given a list of symbol names, get all chunks that match any of the symbol names
+    """
+    file_paths = keywords_data.get("file_paths", [])
+    refined_queries = keywords_data.get("refined_queries", [])
+    # symbol_names = keywords_data.get("symbol_names", [])
+
+    chunks_vector = await asyncio.gather(
+        *[
+            chunks_vdb.query(refined_query, top_k=query_param.top_k)
+            for refined_query in refined_queries
+        ]
+    )
+    chunks_vector = [item for sublist in chunks_vector for item in sublist]
+    chunks_list = [["id", "content", "file_path", "start_line", "end_line"]]
+    chunks = await asyncio.gather(
+        *[text_chunks_db.get_by_id(t["id"]) for t in chunks_vector]
+    )
+    logger.info(
+        f"Chunk retrieval using refined queries uses {len(chunks_vector)} text units"
+    )
+
+    chunks_list.extend(
+        [
+            i,
+            chunk["content"],
+            chunk["file_path"],
+            chunk["start"]["line"],
+            chunk["end"]["line"],
+        ]
+        for i, chunk in enumerate(chunks)
+    )
+
+    file_chunks = await text_chunks_db.get_by_field("file_path", file_paths)
+    chunks_list.extend(
+        [
+            i,
+            chunk["content"],
+            chunk["file_path"],
+            chunk["start"]["line"],
+            chunk["end"]["line"],
+        ]
+        for i, chunk in enumerate(file_chunks)
+    )
+    logger.info(f"File chunk query uses {len(file_chunks)} text units")
+
+    chunks_csv = list_of_list_to_csv(chunks_list)
+    return chunks_csv
 
 
 async def _build_query_context(
-    query: list,
+    query: str,
+    keywords: list,
     knowledge_graph_inst: BaseGraphStorage,
     entities_vdb: BaseVectorStorage,
     relationships_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
+    full_docs: BaseKVStorage,
     query_param: QueryParam,
-    summary_context: str,
+    summary_csv: str,
+    chunks_csv: str,
 ):
-    ll_kewwords, hl_keywrds = query[0], query[1]
+    ll_keywords, hl_keywords = keywords[0], keywords[1]
     if query_param.mode in ["local", "hybrid"]:
-        if ll_kewwords == "":
+        if ll_keywords == "":
             ll_entities_context, ll_relations_context, ll_text_units_context = (
                 "",
                 "",
@@ -732,14 +821,14 @@ async def _build_query_context(
                 ll_relations_context,
                 ll_text_units_context,
             ) = await _get_node_data(
-                ll_kewwords,
+                ll_keywords,
                 knowledge_graph_inst,
                 entities_vdb,
                 text_chunks_db,
                 query_param,
             )
     if query_param.mode in ["global", "hybrid"]:
-        if hl_keywrds == "":
+        if hl_keywords == "":
             hl_entities_context, hl_relations_context, hl_text_units_context = (
                 "",
                 "",
@@ -755,7 +844,7 @@ async def _build_query_context(
                 hl_relations_context,
                 hl_text_units_context,
             ) = await _get_edge_data(
-                hl_keywrds,
+                hl_keywords,
                 knowledge_graph_inst,
                 relationships_vdb,
                 text_chunks_db,
@@ -765,7 +854,7 @@ async def _build_query_context(
         entities_context, relations_context, text_units_context = combine_contexts(
             [hl_entities_context, ll_entities_context],
             [hl_relations_context, ll_relations_context],
-            [hl_text_units_context, ll_text_units_context],
+            [hl_text_units_context, ll_text_units_context, chunks_csv],
         )
     elif query_param.mode == "local":
         entities_context, relations_context, text_units_context = (
@@ -779,10 +868,26 @@ async def _build_query_context(
             hl_relations_context,
             hl_text_units_context,
         )
+
+    if query_param.include_full_file:
+        text_units_context_list = csv_string_to_list(text_units_context)[1:]
+        file_paths = set([s[2] for s in text_units_context_list])
+        for file_path in file_paths:
+            print(file_path)
+        docs = await full_docs.get_by_field("file_path", list(file_paths))
+        docs_list = [["id", "file_path", "content"]]
+        docs_list.extend(
+            [[i, d["file_path"], d["content"]] for i, d in enumerate(docs)]
+        )
+        text_units_context = list_of_list_to_csv(docs_list)
+        logger.info(
+            f"Converted {len(text_units_context_list)} text units to {len(docs)} full files"
+        )
+
     return f"""
 -----Summaries-----
 ```csv
-{summary_context}
+{summary_csv}
 ```
 -----Entities-----
 ```csv
@@ -1167,7 +1272,7 @@ def combine_contexts(entities, relationships, sources):
     # Function to extract entities, relationships, and sources from context strings
     hl_entities, ll_entities = entities[0], entities[1]
     hl_relationships, ll_relationships = relationships[0], relationships[1]
-    hl_sources, ll_sources = sources[0], sources[1]
+    hl_sources, ll_sources, naive_sources = sources[0], sources[1], sources[2]
     # Combine and deduplicate the entities
     combined_entities = process_combine_contexts(hl_entities, ll_entities)
 
@@ -1178,6 +1283,7 @@ def combine_contexts(entities, relationships, sources):
 
     # Combine and deduplicate the sources
     combined_sources = process_combine_contexts(hl_sources, ll_sources)
+    combined_sources = process_combine_contexts(combined_sources, naive_sources)
 
     return combined_entities, combined_relationships, combined_sources
 
@@ -1189,7 +1295,7 @@ async def naive_query(
     query_param: QueryParam,
     global_config: dict,
     hashing_kv: BaseKVStorage = None,
-):
+) -> QueryResult:
     # Handle cache
     use_model_func = global_config["llm_model_func"]
     args_hash = compute_args_hash(query_param.mode, query)
@@ -1197,11 +1303,11 @@ async def naive_query(
         hashing_kv, args_hash, query, query_param.mode
     )
     if cached_response is not None:
-        return cached_response
+        return QueryResult(answer=cached_response)
 
     results = await chunks_vdb.query(query, top_k=query_param.top_k)
     if not len(results):
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
 
     chunks_ids = [r["id"] for r in results]
     chunks = await text_chunks_db.get_by_ids(chunks_ids)
@@ -1213,7 +1319,7 @@ async def naive_query(
 
     if not valid_chunks:
         logger.warning("No valid chunks found after filtering")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
 
     maybe_trun_chunks = truncate_list_by_token_size(
         valid_chunks,
@@ -1223,13 +1329,13 @@ async def naive_query(
 
     if not maybe_trun_chunks:
         logger.warning("No chunks left after truncation")
-        return PROMPTS["fail_response"]
+        return QueryResult(answer=PROMPTS["fail_response"])
 
     logger.info(f"Truncate {len(chunks)} to {len(maybe_trun_chunks)} chunks")
     section = "\n--New Chunk--\n".join([c["content"] for c in maybe_trun_chunks])
 
     if query_param.only_need_context:
-        return section
+        return QueryResult(context=section)
 
     sys_prompt_temp = PROMPTS["naive_rag_response"]
     sys_prompt = sys_prompt_temp.format(
@@ -1237,7 +1343,7 @@ async def naive_query(
     )
 
     if query_param.only_need_prompt:
-        return sys_prompt
+        return QueryResult(answer=sys_prompt)
 
     response = await use_model_func(
         query,
@@ -1270,4 +1376,4 @@ async def naive_query(
         ),
     )
 
-    return response
+    return QueryResult(answer=response)

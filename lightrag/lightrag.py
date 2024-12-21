@@ -30,6 +30,7 @@ from .base import (
     BaseGraphStorage,
     StorageNameSpace,
     QueryParam,
+    QueryResult,
 )
 
 from .storage import (
@@ -45,7 +46,7 @@ from .chunking import (
     should_ignore_file,
 )
 
-from .palmier.tree import (
+from .palmier.summaries import (
     update_summary,
 )
 
@@ -390,25 +391,26 @@ class LightRAG:
             previous_chunks = await self.text_chunks.get_by_field(
                 "full_doc_id", list(new_docs.keys())
             )
+            previous_chunks_ids = set([p["id"] for p in previous_chunks])
 
             # Filter out chunks that have new content
-            _add_chunks_keys = set(new_chunks.keys()) - set(previous_chunks.keys())
+            _add_chunks_ids = set(new_chunks.keys()) - previous_chunks_ids
 
             # Filter out outdated chunks
-            _remove_chunks_keys = set(previous_chunks.keys()) - set(new_chunks.keys())
+            _remove_chunks_ids = previous_chunks_ids - set(new_chunks.keys())
 
             # Filter out chunks that only need metadata update (no content change)
-            _update_chunks_keys = set(previous_chunks.keys()) - set(_remove_chunks_keys)
+            _update_chunks_ids = previous_chunks_ids - set(_remove_chunks_ids)
 
             adding_chunks = {
-                k: v for k, v in new_chunks.items() if k in _add_chunks_keys
+                k: v for k, v in new_chunks.items() if k in _add_chunks_ids
             }
 
             updating_chunks = {
-                k: v for k, v in new_chunks.items() if k in _update_chunks_keys
+                k: v for k, v in new_chunks.items() if k in _update_chunks_ids
             }
 
-            if not len(_add_chunks_keys):
+            if not len(_add_chunks_ids):
                 logger.warning("All chunks are already in the storage")
                 return
             else:
@@ -438,12 +440,12 @@ class LightRAG:
                 await self.chunks_vdb.upsert(updating_chunks)
                 await self.text_chunks.upsert(updating_chunks)
 
-            if len(_remove_chunks_keys) > 0:
+            if len(_remove_chunks_ids) > 0:
                 logger.info(
-                    f"[Remove Chunks] removing {len(_remove_chunks_keys)} outdated chunks"
+                    f"[Remove Chunks] removing {len(_remove_chunks_ids)} outdated chunks"
                 )
                 await delete_by_chunk_ids(
-                    list(_remove_chunks_keys),
+                    list(_remove_chunks_ids),
                     self.chunk_entity_relation_graph,
                     self.entities_vdb,
                     self.relationships_vdb,
@@ -475,21 +477,22 @@ class LightRAG:
             all_docs = await self.full_docs.get_by_field(
                 "file_path", relative_file_paths
             )
-
-            if not len(all_docs):
+            all_docs_ids = list([d["id"] for d in all_docs])
+            if not len(all_docs_ids):
                 logger.warning("Docs are not found in the storage")
                 return
 
             update_storage = True
 
             all_chunks = await self.text_chunks.get_by_field(
-                "full_doc_id", list(all_docs.keys())
+                "full_doc_id", all_docs_ids
             )
+            all_chunks_ids = list([c["id"] for c in all_chunks])
 
             # Delete chunks
             logger.info(f"[Remove Chunks] removing {len(all_chunks)} chunks")
             await delete_by_chunk_ids(
-                list(all_chunks.keys()),
+                all_chunks_ids,
                 self.chunk_entity_relation_graph,
                 self.entities_vdb,
                 self.relationships_vdb,
@@ -499,7 +502,7 @@ class LightRAG:
 
             # Delete docs
             logger.info(f"[Remove Docs] removing {len(all_docs)} docs")
-            await self.full_docs.delete_by_ids(list(all_docs.keys()))
+            await self.full_docs.delete_by_ids(all_docs_ids)
         finally:
             if update_storage:
                 await self._delete_done()
@@ -728,11 +731,11 @@ class LightRAG:
             if update_storage:
                 await self._insert_done()
 
-    def query(self, query: str, param: QueryParam = QueryParam()):
+    def query(self, query: str, param: QueryParam = QueryParam()) -> QueryResult:
         loop = always_get_an_event_loop()
         return loop.run_until_complete(self.aquery(query, param))
 
-    async def aquery(self, query: str, param: QueryParam = QueryParam()):
+    async def aquery(self, query: str, param: QueryParam = QueryParam()) -> QueryResult:
         if param.mode in ["local", "global", "hybrid"]:
             response = await kg_query(
                 query,
@@ -741,6 +744,8 @@ class LightRAG:
                 self.relationships_vdb,
                 self.summaries_vdb,
                 self.text_chunks,
+                self.chunks_vdb,
+                self.full_docs,
                 param,
                 asdict(self),
                 hashing_kv=self.llm_response_cache,

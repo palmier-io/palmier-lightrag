@@ -121,7 +121,7 @@ class SupabaseChunksStorage(BaseKVStorage):
 
         return [id_to_data.get(chunk_id) for chunk_id in chunk_ids]
 
-    async def get_by_field(self, field: str, values: list) -> dict[str, dict]:
+    async def get_by_field(self, field: str, values: list) -> list[dict]:
         """Optimized for doc_id queries"""
         if field == "full_doc_id":
             # Use the optimized index
@@ -137,17 +137,20 @@ class SupabaseChunksStorage(BaseKVStorage):
                 self.table.select("*").eq("repository_id", self.repo_id).execute()
             )
 
-        result = {}
+        result = []
         for row in response.data:
             # Check if the field value matches (either in main columns or metadata)
             field_value = row.get(field) or (row["metadata"] or {}).get(field)
             if field_value in values:
-                result[row["chunk_id"]] = {
-                    "content": row["content"],
-                    "file_path": row["file_path"],
-                    "full_doc_id": row["full_doc_id"],
-                    **(row["metadata"] or {}),
-                }
+                result.append(
+                    {
+                        "id": row["chunk_id"],
+                        "content": row["content"],
+                        "file_path": row["file_path"],
+                        "full_doc_id": row["full_doc_id"],
+                        **(row["metadata"] or {}),
+                    }
+                )
         return result
 
     async def filter_keys(self, chunk_ids: list[str]) -> set[str]:

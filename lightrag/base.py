@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import TypedDict, Union, Literal, Generic, TypeVar, Any
+from typing import TypedDict, Union, Literal, Generic, TypeVar, Any, Optional, Dict
 
 import numpy as np
 
@@ -20,6 +20,8 @@ class QueryParam:
     only_need_prompt: bool = False
     response_type: str = "Multiple Paragraphs"
     stream: bool = False
+    include_reasoning: bool = False
+    include_full_file: bool = False
     # Number of top-k items to retrieve; corresponds to entities in "local" mode and relationships in "global" mode.
     top_k: int = 60
     # Number of document chunks to retrieve.
@@ -30,6 +32,13 @@ class QueryParam:
     max_token_for_global_context: int = 4000
     # Number of tokens for the entity descriptions
     max_token_for_local_context: int = 4000
+
+
+@dataclass
+class QueryResult:
+    answer: Optional[str] = None
+    reasoning: Optional[Dict[str, Any]] = None
+    context: Optional[str] = None
 
 
 @dataclass
