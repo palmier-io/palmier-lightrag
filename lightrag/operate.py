@@ -645,7 +645,7 @@ async def kg_query(
         summary_csv,
         chunks_csv,
     )
-    reasoning = reasoning_result if query_param.include_reasoning else None
+    reasoning = keywords_data if query_param.include_reasoning and keywords_data else None
     if query_param.only_need_context:
         return QueryResult(context=context, reasoning=reasoning)
     if context is None:
