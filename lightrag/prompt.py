@@ -8,46 +8,90 @@ PROMPTS["DEFAULT_RECORD_DELIMITER"] = "##"
 PROMPTS["DEFAULT_COMPLETION_DELIMITER"] = "<|COMPLETE|>"
 PROMPTS["process_tickers"] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-PROMPTS["DEFAULT_ENTITY_TYPES"] = [
-    "function",
-    "class",
-    "method",
-    "variable",
-    "module",
-    "package",
-    "library",
-    "constant",
-    "interface",
-    "file",
-]
+PROMPTS["DEFAULT_ENTITY_TYPES"] = {
+    "core_code": [
+        "function",
+        "class",
+        "method",
+        "variable",
+        "module",
+        "package",
+        "library",
+        "constant",
+        "interface"
+    ],
+    "script": [
+        "file",
+        "script",
+        "command",
+        "configuration",
+        "dependency",
+        "service"
+    ],
+    "test": [
+        "file"
+    ],
+    "example": [
+        "file"
+    ],
+    "documentation": [
+        "file",
+        "component",
+        "service",
+        "architecture",
+        "design pattern"
+    ],
+}
 
-PROMPTS["entity_extraction"] = """-Goal-
-Given a code file or a text document and a corresponding file summary, along with a list of entity types, identify all entities of those types from the code and all relationships among the identified entities. The file summary is provided as context and should not appear in the final output.
+
+
+PROMPTS["entity_extraction"] = """
+-Goal-
+You are given:
+2. A file summary providing high-level context of the file.
+3. A list of entity types to look for.
+4. The actual content (chunk of code or text).
+
+Your objective is to identify:
+• All relevant entities of the specified types in the file.
+• The relationships among those entities.
+• High-level content keywords capturing the main concepts in the file.
 
 -Steps-
-0. Consider the provided file summary as additional context to help understand the roles, functionalities, and relationships in the code. Do not include the file summary text in the final output.
+0. Determine file type:
+   - Infer the file context/type from the `File_summary` by looking for key indicators:
+     - Mentions of "deployment steps," "container configuration," or references to infrastructure (e.g., Docker, Kubernetes, AWS) may indicate a deployment script.
+     - Mentions of "test fixtures," "mock data," or "example usage" may suggest example/test code.
+     - References to "documentation," "overview," "requirements," or "design" may suggest text/documentation.
+     - If references to "installation steps," "dependencies," or "environment variables" appear, it may be a setup script.
+     - Otherwise, default to core code logic.
+   - Do not include the summary text or disclaimers in your final output.
 
-1. Identify all entities in the code file. For each identified entity, extract the following information:
-- entity_name: Name of the entity, as it appears in the code
-- entity_type: One of the following types: [{entity_types}]
-- entity_description: Comprehensive description of the entity's attributes, functionalities, and role within the code
-Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>
+1. Identify all entities in the file that match the determined file type. For each entity:
+   - entity_name: The literal name of the entity as it appears in the code or text.
+   - entity_type: Must be one of the entity types specified for the determined file type: [{entity_types}].
+   - entity_description: A concise description of the entity's attributes, functionalities, or role, in the context/type of the file determined above.
+   - Skip any entities that don't match the allowed entity types for this file type.
 
-2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
-For each pair of related entities, extract the following information:
-- source_entity: name of the source entity, as identified in step 1
-- target_entity: name of the target entity, as identified in step 1
-- relationship_description: explanation as to why you think the source entity and the target entity are related to each other(e.g., function calls another function, class inherits from another class)
-- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
-- relationship_keywords: one or more high-level key words that summarize the overarching nature of the relationship, focusing on concepts or themes rather than specific details (e.g., "function call", "inheritance", "dependency")
+2. Identify relationships among the recognized entities. For each pair of related entities:
+- source_entity: The name of the source entity.
+- target_entity: The name of the target entity.
+- relationship_description: Explanation of how or why these two entities are connected.
+- relationship_strength: A numeric score (1–10) indicating the strength or importance of this relationship.
+- relationship_keywords: High-level keywords (e.g., "function call", "inheritance", "dependency", "setup step", "configuration reference").
 Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
 
-3. Identify high-level key words that summarize the main concepts, functionalities, or topics of the entire text. These should capture the overarching ideas present in the document.
+3. Content-Level Keywords:
+Identify high-level keywords or topics that describe the overarching themes, concepts, or functionalities of the file. 
 Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
 
 4. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
 
-5. When finished, output {completion_delimiter}
+5. Important:
+- Avoid hallucinating. Only identify entities and relationships that are explicitly present in the file. If something is implied but not mentioned, do not fabricate it.
+- The provided file summary/context is only there to guide you on which details are important based on the inferred or provided file type.
+
+6. When finished, output {completion_delimiter}
 
 ######################
 -Examples-
@@ -59,7 +103,7 @@ Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_
 ######################
 Entity_types: {entity_types}
 File_summary: {file_summary}
-Text: {input_text}
+Content: {input_text}
 ######################
 Output:
 """
@@ -229,7 +273,7 @@ Then, analyze the query through these steps and output the analysis in JSON form
 - "thought_process": List of reasoning steps that led to your analysis, including insights from document summaries and how you got the answers
 - "high_level_keywords": List of overarching concepts, technical patterns, or architectural themes
 - "low_level_keywords": List of specific functions, classes, variables, and technical details
-- "file_paths": List of potential file paths or patterns to search for (can include partial paths)
+- "file_paths": List of potential file paths to search for
 - "symbol_names": List of specific code symbols like function names, class names, or variable names that are relevant to the query
 - "refined_queries": List of semantic search queries that could help find relevant information, each query should ask for different information
 
@@ -304,9 +348,6 @@ Output:
   ],
   "file_paths": [
     "lightrag/llm.py",
-    "examples/lightrag_api_openai_compatible_demo.py",
-    "examples/lightrag_lmdeploy_demo.py",
-    "examples/lightrag_api_open_webui_demo.py"
   ],
   "symbol_names": [
     "openai_complete_if_cache",

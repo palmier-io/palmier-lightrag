@@ -105,65 +105,41 @@ class NanoVectorDBStorage(BaseVectorStorage):
         if not len(data):
             logger.warning("You insert an empty data to vector DB")
             return []
+        list_data = [
+            {
+                "__id__": k,
+                **{k1: v1 for k1, v1 in v.items() if k1 in self.meta_fields},
+            }
+            for k, v in data.items()
+        ]
+        contents = [v["content"] for v in data.values()]
+        batches = [
+            contents[i : i + self._max_batch_size]
+            for i in range(0, len(contents), self._max_batch_size)
+        ]
 
-        # Separate data into content changes and metadata-only changes
-        content_changes = {}
-        metadata_changes = {}
+        async def wrapped_task(batch):
+            result = await self.embedding_func(batch)
+            pbar.update(1)
+            return result
 
-        for k, v in data.items():
-            existing = self._client.get([k])
-            if not existing or existing[0].get("content") != v.get("content"):
-                content_changes[k] = v
-            else:
-                metadata_changes[k] = v
+        embedding_tasks = [wrapped_task(batch) for batch in batches]
+        pbar = tqdm_async(
+            total=len(embedding_tasks), desc="Generating embeddings", unit="batch"
+        )
+        embeddings_list = await asyncio.gather(*embedding_tasks)
 
-        results = []
-
-        # Handle metadata-only updates
-        if metadata_changes:
-            metadata_list = [
-                {
-                    "__id__": k,
-                    **{k1: v1 for k1, v1 in v.items() if k1 in self.meta_fields},
-                    "__vector__": self._client.get([k])[0]["__vector__"],
-                }
-                for k, v in metadata_changes.items()
-            ]
-            results.extend(self._client.upsert(datas=metadata_list))
-
-        # Handle content changes that need new embeddings
-        if content_changes:
-            list_data = [
-                {
-                    "__id__": k,
-                    **{k1: v1 for k1, v1 in v.items() if k1 in self.meta_fields},
-                }
-                for k, v in content_changes.items()
-            ]
-            contents = [v["content"] for v in content_changes.values()]
-
-            batches = [
-                contents[i : i + self._max_batch_size]
-                for i in range(0, len(contents), self._max_batch_size)
-            ]
-
-            async def wrapped_task(batch):
-                result = await self.embedding_func(batch)
-                pbar.update(1)
-                return result
-
-            embedding_tasks = [wrapped_task(batch) for batch in batches]
-            pbar = tqdm_async(
-                total=len(embedding_tasks), desc="Generating embeddings", unit="batch"
-            )
-            embeddings_list = await asyncio.gather(*embedding_tasks)
-
-            embeddings = np.concatenate(embeddings_list)
-
+        embeddings = np.concatenate(embeddings_list)
+        if len(embeddings) == len(list_data):
             for i, d in enumerate(list_data):
                 d["__vector__"] = embeddings[i]
-            results.extend(self._client.upsert(datas=list_data))
-        return results
+            results = self._client.upsert(datas=list_data)
+            return results
+        else:
+            # sometimes the embedding is not returned correctly. just log it.
+            logger.error(
+                f"embedding is not 1-1 with data, {len(embeddings)} != {len(list_data)}"
+            )
 
     async def query(self, query: str, top_k=5):
         embedding = await self.embedding_func([query])
