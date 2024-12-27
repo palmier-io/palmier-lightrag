@@ -273,9 +273,17 @@ Then, analyze the query through these steps and output the analysis in JSON form
 - "thought_process": List of reasoning steps that led to your analysis, including insights from document summaries and how you got the answers
 - "high_level_keywords": List of overarching concepts, technical patterns, or architectural themes
 - "low_level_keywords": List of specific functions, classes, variables, and technical details
-- "file_paths": List of potential file paths to search for
+- "file_paths": List of potential file paths to search for. Only attempt to include file paths that are most relevant to the query, based on the document summaries. Return empty list if no relevant file paths are found.
 - "symbol_names": List of specific code symbols like function names, class names, or variable names that are relevant to the query
-- "refined_queries": List of semantic search queries that could help find relevant information, each query should ask for different information
+- "refined_queries": List of semantic search queries that break down the original query into different aspects or perspectives. Each query should focus on a distinct aspect like:
+  - Implementation details
+  - Configuration/setup
+  - Usage examples
+  - Error handling
+  - Dependencies/integrations
+  - Architecture/design patterns
+  - Testing/validation
+Make sure each refined query is relevant to answering the original question but explores a different angle.
 
 ######################
 -Examples-
@@ -314,13 +322,16 @@ Output:
   ],
   "high_level_keywords": ["Authentication", "Login process", "Security"],
   "low_level_keywords": ["User credentials", "Token generation", "Password verification", "Session management"],
-  "file_paths": ["auth/service.py", "models/user.py", "auth/", "services/auth", "login/"],
+  "file_paths": ["auth/service.py", "models/user.py"],
   "symbol_names": ["AuthService", "authenticate", "login", "verify_password", "TokenGenerator", "User"],
   "refined_queries": [
-    "AuthService authentication implementation",
-    "login process flow AuthService",
-    "user credential verification AuthService",
-    "password verification User model authentication"
+    "What is the implementation flow of AuthService authentication method",
+    "How are user credentials validated and verified in the login process",
+    "What security measures and token management are used during authentication",
+    "How does error handling work for failed authentication attempts",
+    "What external dependencies or integrations are used in the authentication process",
+    "How is user session state managed after successful authentication",
+    "What configuration options are available for AuthService"
   ]
 }
 #############################""",
@@ -329,7 +340,7 @@ Output:
 Query: "How many model providers are supported?"
 ################
 Output:
-{{
+{
   "thought_process": [
     "1. Query asks about supported model providers in the framework",
     "2. Need to analyze summaries to identify different model integrations",
@@ -357,12 +368,15 @@ Output:
     "llm_model_func"
   ],
   "refined_queries": [
-    "List all supported model providers in lightrag",
-    "How to integrate different LLM providers",
-    "What are the available model deployment options",
-    "Supported embedding model providers"
+    "What are the built-in model provider integrations available",
+    "How to configure different model providers in the system",
+    "What are the requirements for each supported model provider",
+    "How to implement custom model provider integrations",
+    "What are the differences between supported provider implementations",
+    "How is model provider authentication handled",
+    "What are the limitations or constraints for each provider"
   ]
-}}
+}
 #############################""",
 ]
 
