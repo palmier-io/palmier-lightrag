@@ -31,7 +31,7 @@ from .base import (
     QueryParam,
     QueryResult,
 )
-
+from .llm import voyageai_rerank
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
 
 
@@ -286,7 +286,7 @@ async def extract_entities(
         tuple_delimiter=PROMPTS["DEFAULT_TUPLE_DELIMITER"],
         record_delimiter=PROMPTS["DEFAULT_RECORD_DELIMITER"],
         completion_delimiter=PROMPTS["DEFAULT_COMPLETION_DELIMITER"],
-        entity_types=",".join(PROMPTS["DEFAULT_ENTITY_TYPES"]),
+        entity_types=",".join([f"{k}:{v}" for k,v in PROMPTS["DEFAULT_ENTITY_TYPES"].items()]),
         language=language,
     )
     # add example's format
@@ -628,13 +628,14 @@ async def kg_query(
 
     # Build context
     keywords = [ll_keywords, hl_keywords]
+    thought_process = f"User query: {query} \nThought process: {keywords_data.get('thought_process', [])}"
 
     chunks_csv = await _get_chunks_from_keywords(
         keywords_data, text_chunks_db, chunks_vdb, query_param
     )
 
     context = await _build_query_context(
-        query,
+        thought_process,
         keywords,
         knowledge_graph_inst,
         entities_vdb,
@@ -644,6 +645,7 @@ async def kg_query(
         query_param,
         summary_csv,
         chunks_csv,
+        global_config,
     )
     reasoning = dict(keywords_data) if query_param.include_reasoning and keywords_data else None
     if query_param.only_need_context:
@@ -689,6 +691,50 @@ async def kg_query(
     )
     return QueryResult(answer=response, reasoning=reasoning)
 
+async def _rerank_context(context: str, query_str: str, query_param: QueryParam, rerank_model: str):
+    """
+    Rerank the context using voyage_rerank while preserving metadata.
+    It compares the content (sources, summaries) or description (entities, relationships) with the user query + thought_process of the LLM.
+    """
+    if not context.strip():
+        return context
+        
+    # Parse CSV context into list of lists
+    context_list = csv_string_to_list(context)
+    if len(context_list) <= 1:  # Only header or empty
+        return context
+        
+    header = context_list[0]
+    rows = context_list[1:]
+    
+    # Extract content column index based on header
+    content_idx = None
+    for i, col in enumerate(header):
+        if col.lower() == "content" or col.lower() == "description":
+            content_idx = i
+            break
+    
+    if content_idx is None:
+        return context  # No content/description column found
+        
+    # Extract documents for reranking
+    documents = [row[content_idx] for row in rows]    
+    
+    # Get reranked results with scores
+    reranked = await voyageai_rerank(query_str, documents, model=rerank_model, top_k=query_param.rerank_top_k)
+    
+    # Create mapping of content to original row to preserve metadata
+    content_to_row = {row[content_idx]: row for row in rows}
+    
+    # Rebuild rows in reranked order with original metadata
+    reranked_rows = []
+    for result in reranked:  # result is a RerankingResult
+        original_row = content_to_row[result.document]  # Use .document to access the field
+        reranked_rows.append(original_row)
+    
+    # Reconstruct CSV with header and reranked rows
+    reranked_context = list_of_list_to_csv([header] + reranked_rows)
+    return reranked_context
 
 async def _get_summaries_from_query(
     query: str,
@@ -802,6 +848,7 @@ async def _build_query_context(
     query_param: QueryParam,
     summary_csv: str,
     chunks_csv: str,
+    global_config: dict,
 ):
     ll_keywords, hl_keywords = keywords[0], keywords[1]
     if query_param.mode in ["local", "hybrid"]:
@@ -872,8 +919,6 @@ async def _build_query_context(
     if query_param.include_full_file:
         text_units_context_list = csv_string_to_list(text_units_context)[1:]
         file_paths = set([s[2] for s in text_units_context_list])
-        for file_path in file_paths:
-            print(file_path)
         docs = await full_docs.get_by_field("file_path", list(file_paths))
         docs_list = [["id", "file_path", "content"]]
         docs_list.extend(
@@ -883,6 +928,18 @@ async def _build_query_context(
         logger.info(
             f"Converted {len(text_units_context_list)} text units to {len(docs)} full files"
         )
+
+    if query_param.rerank_enabled:
+        rerank_model = global_config["rerank_model"]
+        logger.info(f"Reranking with query: {query}")
+        logger.info(f"Reranking summaries to {query_param.rerank_top_k} results")
+        summary_csv = await _rerank_context(summary_csv, query, query_param, rerank_model)
+        logger.info(f"Reranking entities to {query_param.rerank_top_k} results")
+        entities_context = await _rerank_context(entities_context, query, query_param, rerank_model)
+        logger.info(f"Reranking relationships to {query_param.rerank_top_k} results")
+        relations_context = await _rerank_context(relations_context, query, query_param, rerank_model)
+        logger.info(f"Reranking text units to {query_param.rerank_top_k} results")
+        text_units_context = await _rerank_context(text_units_context, query, query_param, rerank_model)
 
     return f"""
 -----Summaries-----

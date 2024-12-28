@@ -22,6 +22,8 @@ class QueryParam:
     stream: bool = False
     include_reasoning: bool = False
     include_full_file: bool = False
+    rerank_enabled: bool = False
+    rerank_top_k: int = 10
     # Number of top-k items to retrieve; corresponds to entities in "local" mode and relationships in "global" mode.
     top_k: int = 60
     # Number of document chunks to retrieve.

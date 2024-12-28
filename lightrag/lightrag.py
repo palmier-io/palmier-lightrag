@@ -186,6 +186,9 @@ class LightRAG:
     llm_model_max_async: int = 16
     llm_model_kwargs: dict = field(default_factory=dict)
 
+    # Reranking - currently only support voyageai rerank model
+    rerank_model: str = "rerank-2-lite"
+
     # storage
     vector_db_storage_cls_kwargs: dict = field(default_factory=dict)
 

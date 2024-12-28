@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Optional, Dict, List
 from dataclasses import dataclass
 import time
+import asyncio
 
 from ..base import BaseVectorStorage
 from ..utils import compute_mdhash_id
@@ -182,7 +183,7 @@ async def update_summary_recursive(
     if should_ignore_file(path):
         return None
 
-    # Bottom-up - create file nodes first
+    # For files, process directly
     if path_obj.is_file():
         node = await SummaryNode.create_file_node(
             str(path_obj), root_directory, tree, use_llm_func
@@ -191,11 +192,21 @@ async def update_summary_recursive(
             updates[node.id] = node.to_dict()
         return node
 
-    children_nodes = []
+    # For directories, gather all child paths first
+    child_paths = []
     try:
         for entry in path_obj.iterdir():
-            child_node = await update_summary_recursive(
-                str(entry),
+            if not should_ignore_file(str(entry)):
+                child_paths.append(entry)
+    except (PermissionError, OSError) as e:
+        logger.warning(f"Error accessing directory {path}: {e}")
+        return None
+
+    # Process all children in parallel
+    children_nodes = await asyncio.gather(
+        *(
+            update_summary_recursive(
+                str(child_path),
                 root_directory,
                 tree,
                 summaries,
@@ -203,11 +214,12 @@ async def update_summary_recursive(
                 exclude_paths,
                 updates,
             )
-            if child_node:
-                children_nodes.append(child_node)
-    except (PermissionError, OSError) as e:
-        logger.warning(f"Error accessing directory {path}: {e}")
-        return None
+            for child_path in child_paths
+        )
+    )
+    
+    # Filter out None values
+    children_nodes = [node for node in children_nodes if node]
 
     # Create directory node
     dir_node = await SummaryNode.create_directory_node(
