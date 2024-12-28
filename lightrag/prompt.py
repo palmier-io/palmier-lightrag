@@ -53,9 +53,9 @@ You are given:
 4. The actual content (chunk of code or text).
 
 Your objective is to identify:
-• All relevant entities of the specified types in the file.
-• The relationships among those entities.
-• High-level content keywords capturing the main concepts in the file.
+• Key entities (ignoring subtle/minor variables or implementation details)
+• The relationships among those entities, including cross-file relationships
+• High-level content keywords capturing the main concepts
 
 -Steps-
 0. Determine file type:
@@ -67,25 +67,32 @@ Your objective is to identify:
      - Otherwise, default to core code logic.
    - Do not include the summary text or disclaimers in your final output.
 
-1. Identify all entities in the file that match the determined file type. For each entity:
+1. Identify significant entities in the file that match the determined file type. For each entity:
    - entity_name: The literal name of the entity as it appears in the code or text.
    - entity_type: Must be one of the entity types specified for the determined file type: [{entity_types}].
-   - entity_description: A concise description of the entity's attributes, functionalities, or role, in the context/type of the file determined above.
+   - entity_description: A comprehensive description including:
+     • What this entity is and its primary purpose
+     • Which file(s) contain this entity
+     • How this entity relates to the overall purpose described in the file summary
+   - Focus only on important entities - skip minor variables, utility functions, or implementation details
    - Skip any entities that don't match the allowed entity types for this file type.
 
 2. Identify relationships among the recognized entities. For each pair of related entities:
 - source_entity: The name of the source entity.
 - target_entity: The name of the target entity.
-- relationship_description: Explanation of how or why these two entities are connected.
+- relationship_description: Must include:
+  • How these entities interact or depend on each other
+  • Whether they exist in the same file or across different files
+  • The nature of their relationship (e.g., inheritance, composition, usage)
 - relationship_strength: A numeric score (1–10) indicating the strength or importance of this relationship.
-- relationship_keywords: High-level keywords (e.g., "function call", "inheritance", "dependency", "setup step", "configuration reference").
+- relationship_keywords: High-level keywords describing the type of relationship.
 Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
 
 3. Content-Level Keywords:
 Identify high-level keywords or topics that describe the overarching themes, concepts, or functionalities of the file. 
 Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
 
-4. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
+4. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use {record_delimiter} as the list delimiter.
 
 5. Important:
 - Avoid hallucinating. Only identify entities and relationships that are explicitly present in the file. If something is implied but not mentioned, do not fabricate it.
@@ -112,6 +119,7 @@ PROMPTS["entity_extraction_examples"] = [
     """Example 1:
 
 Entity_types: [function, class, method, variable, module, package, library, constant, interface]
+File_summary: This file implements basic mathematical operations through a Calculator class. It's part of the core math module that provides fundamental arithmetic functionality for the application.
 Text:
 ```python
 # math_operations.py
@@ -137,21 +145,18 @@ PI = 3.14159
 ```
 ################
 Output:
-("entity"{tuple_delimiter}"Calculator"{tuple_delimiter}"class"{tuple_delimiter}"Calculator is a simple class that provides methods for basic arithmetic operations like addition and subtraction."){record_delimiter}
-("entity"{tuple_delimiter}"add"{tuple_delimiter}"method"{tuple_delimiter}"add is a method of the Calculator class that returns the sum of two numbers, x and y."){record_delimiter}
-("entity"{tuple_delimiter}"subtract"{tuple_delimiter}"method"{tuple_delimiter}"subtract is a method of the Calculator class that returns the difference between two numbers, x and y."){record_delimiter}
-("entity"{tuple_delimiter}"multiply"{tuple_delimiter}"function"{tuple_delimiter}"multiply is a standalone function that returns the product of x and y."){record_delimiter}
-("entity"{tuple_delimiter}"divide"{tuple_delimiter}"function"{tuple_delimiter}"divide is a standalone function that returns the quotient of x and y, raising a ValueError if y is zero."){record_delimiter}
-("entity"{tuple_delimiter}"PI"{tuple_delimiter}"constant"{tuple_delimiter}"PI is a constant representing the mathematical constant π, approximately 3.14159."){record_delimiter}
-("relationship"{tuple_delimiter}"Calculator"{tuple_delimiter}"add"{tuple_delimiter}"The add method is defined within the Calculator class."{tuple_delimiter}"class-method relationship"{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"Calculator"{tuple_delimiter}"subtract"{tuple_delimiter}"The subtract method is defined within the Calculator class."{tuple_delimiter}"class-method relationship"{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"divide"{tuple_delimiter}"ValueError"{tuple_delimiter}"The divide function raises a ValueError when attempting to divide by zero."{tuple_delimiter}"error handling, exception"{tuple_delimiter}8){record_delimiter}
-("relationship"{tuple_delimiter}"multiply"{tuple_delimiter}"PI"{tuple_delimiter}"The multiply function could use PI for calculations involving circles."{tuple_delimiter}"mathematical operations, constants"{tuple_delimiter}5){record_delimiter}
-("content_keywords"{tuple_delimiter}"arithmetic operations, calculator class, functions, constants, error handling"){completion_delimiter}
+("entity"{tuple_delimiter}"Calculator"{tuple_delimiter}"class"{tuple_delimiter}"Calculator is the main class providing basic arithmetic operations. Located in math_operations.py, it serves as a core component of the math module, implementing the fundamental calculation capabilities described in the file summary."){record_delimiter}
+("entity"{tuple_delimiter}"multiply"{tuple_delimiter}"function"{tuple_delimiter}"multiply is a standalone function in math_operations.py that handles multiplication operations. As part of the core math functionality, it complements the Calculator class's arithmetic capabilities."){record_delimiter}
+("entity"{tuple_delimiter}"divide"{tuple_delimiter}"function"{tuple_delimiter}"divide is a standalone function in math_operations.py that performs division with error handling. It supports the file's purpose of providing comprehensive mathematical operations with proper validation."){record_delimiter}
+("entity"{tuple_delimiter}"PI"{tuple_delimiter}"constant"{tuple_delimiter}"PI is a mathematical constant defined in math_operations.py. While not directly related to the Calculator operations, it provides essential mathematical constants for calculations."){record_delimiter}
+("relationship"{tuple_delimiter}"Calculator"{tuple_delimiter}"add"{tuple_delimiter}"The add method is defined within the Calculator class in math_operations.py. It's an internal class method relationship providing basic addition functionality."{tuple_delimiter}"class-method relationship, same file"{tuple_delimiter}9){record_delimiter}
+("relationship"{tuple_delimiter}"divide"{tuple_delimiter}"ValueError"{tuple_delimiter}"The divide function in math_operations.py raises a ValueError for division by zero, demonstrating error handling integration within the same file."{tuple_delimiter}"error handling, exception, same file"{tuple_delimiter}8){record_delimiter}
+("content_keywords"{tuple_delimiter}"arithmetic operations, calculator implementation, mathematical functions, error handling"){completion_delimiter}
 ######################""",
     """Example 2:
 
 Entity_types: [function, class, method, variable, module, package, library, constant, interface, component, system, process, requirement, specification, architecture, design pattern]
+File_summary: This authentication system documentation outlines the core authentication architecture. It describes how the system handles user authentication, focusing on OAuth2 implementation and secure token management.
 Text:
 # Project Overview Document
 
@@ -180,15 +185,14 @@ class UserManager:
 ```
 #############
 Output:
-("entity"{tuple_delimiter}"Authentication Module"{tuple_delimiter}"component"{tuple_delimiter}"The Authentication Module handles user login, registration, and session management in the system architecture."){record_delimiter}
-("entity"{tuple_delimiter}"UserManager"{tuple_delimiter}"class"{tuple_delimiter}"UserManager is a class that interfaces with the database to retrieve and store user information."){record_delimiter} ("entity"{tuple_delimiter}"AuthService"{tuple_delimiter}"class"{tuple_delimiter}"AuthService is a class that handles authentication processes and utilizes the TokenGenerator function to create secure tokens."){record_delimiter}
-("entity"{tuple_delimiter}"OAuth2"{tuple_delimiter}"authentication process"{tuple_delimiter}"OAuth2 is an authentication protocol implemented to enhance security in the latest update."){record_delimiter} ("entity"{tuple_delimiter}"TokenGenerator"{tuple_delimiter}"function"{tuple_delimiter}"TokenGenerator is a function used by AuthService to generate secure tokens for authenticated users."){record_delimiter}
-("entity"{tuple_delimiter}"AuthenticationError"{tuple_delimiter}"exception"{tuple_delimiter}"AuthenticationError is an exception raised when user credentials are invalid during the authentication process."){record_delimiter}
-("relationship"{tuple_delimiter}"Authentication Module"{tuple_delimiter}"UserManager"{tuple_delimiter}"Authentication Module relies on the UserManager class to interface with the database for user information."{tuple_delimiter}"dependency, component-class relationship"{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"TokenGenerator"{tuple_delimiter}"AuthService utilizes the TokenGenerator function to create secure tokens."{tuple_delimiter}"function call, utilization"{tuple_delimiter}8){record_delimiter} ("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"UserManager"{tuple_delimiter}"AuthService depends on UserManager to retrieve user data during authentication."{tuple_delimiter}"dependency, class interaction"{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"OAuth2"{tuple_delimiter}"Authentication Module"{tuple_delimiter}"OAuth2 authentication process is implemented in the Authentication Module to enhance security."{tuple_delimiter}"implementation, security enhancement"{tuple_delimiter}8){record_delimiter}
-("relationship"{tuple_delimiter}"authenticate"{tuple_delimiter}"AuthenticationError"{tuple_delimiter}"The authenticate method raises AuthenticationError when credentials are invalid."{tuple_delimiter}"error handling, exception raising"{tuple_delimiter}7){record_delimiter}
-("content_keywords"{tuple_delimiter}"authentication, user management, security, OAuth2, system architecture, dependency injection"){completion_delimiter}
+("entity"{tuple_delimiter}"Authentication Module"{tuple_delimiter}"component"{tuple_delimiter}"The Authentication Module is the core authentication component described in the documentation. Located in the system's authentication layer, it directly implements the authentication architecture outlined in the file summary, handling user login, registration, and session management."){record_delimiter}
+("entity"{tuple_delimiter}"AuthService"{tuple_delimiter}"class"{tuple_delimiter}"AuthService is the primary authentication handling class. Found in the authentication implementation file, it fulfills the secure token management requirements specified in the file summary through OAuth2 integration."){record_delimiter}
+("entity"{tuple_delimiter}"UserManager"{tuple_delimiter}"class"{tuple_delimiter}"UserManager is the database interface class for user operations. While in the same file as AuthService, it handles the user data persistence layer mentioned in the authentication architecture documentation."){record_delimiter}
+("entity"{tuple_delimiter}"OAuth2"{tuple_delimiter}"process"{tuple_delimiter}"OAuth2 is the authentication protocol implemented in the Authentication Module. As highlighted in the file summary, it's a key security enhancement in the latest system update."){record_delimiter}
+("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"UserManager"{tuple_delimiter}"AuthService depends on UserManager for user data retrieval within the same authentication system. They exist in the same file and interact through direct class composition."{tuple_delimiter}"dependency injection, same file"{tuple_delimiter}9){record_delimiter}
+("relationship"{tuple_delimiter}"Authentication Module"{tuple_delimiter}"OAuth2"{tuple_delimiter}"The Authentication Module implements OAuth2 as its security protocol. This cross-component relationship spans multiple files in the authentication system."{tuple_delimiter}"implementation, security, cross-file"{tuple_delimiter}8){record_delimiter}
+("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"TokenGenerator"{tuple_delimiter}"AuthService uses TokenGenerator for creating secure tokens. While TokenGenerator is defined in a separate file, it's integrated into the authentication flow."{tuple_delimiter}"utility usage, cross-file"{tuple_delimiter}7){record_delimiter}
+("content_keywords"{tuple_delimiter}"authentication system, OAuth2 implementation, user management, security architecture, token-based authentication"){completion_delimiter}
 #############################""",
 ]
 
@@ -222,9 +226,8 @@ PROMPTS[
 PROMPTS["fail_response"] = "Sorry, I'm not able to provide an answer to that question."
 
 PROMPTS["rag_response"] = """---Role---
-
-You are a helpful AI programming assistant responding to questions about the repository {repository_name}.
-
+a world class Programming AI assistant designed to help users understand the repository {repository_name}.
+Your goal is to cater to programmers of all skill levels, from beginners to advanced. Follow these guidelines to ensure your examples are effective and easy to understand:
 
 ---Goal---
 
