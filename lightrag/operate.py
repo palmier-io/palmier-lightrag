@@ -628,7 +628,7 @@ async def kg_query(
 
     # Build context
     keywords = [ll_keywords, hl_keywords]
-    thought_process = "\n".join(keywords_data.get("thought_process", []))
+    thought_process = f"User query: {query} \nThought process: {keywords_data.get('thought_process', [])}"
 
     chunks_csv = await _get_chunks_from_keywords(
         keywords_data, text_chunks_db, chunks_vdb, query_param
@@ -691,8 +691,11 @@ async def kg_query(
     )
     return QueryResult(answer=response, reasoning=reasoning)
 
-async def _rerank_context(context: str, thought_process: str, query_param: QueryParam, rerank_model: str):
-    """Rerank the context using voyage_rerank while preserving metadata"""
+async def _rerank_context(context: str, query_str: str, query_param: QueryParam, rerank_model: str):
+    """
+    Rerank the context using voyage_rerank while preserving metadata.
+    It compares the content (sources, summaries) or description (entities, relationships) with the user query + thought_process of the LLM.
+    """
     if not context.strip():
         return context
         
@@ -718,7 +721,7 @@ async def _rerank_context(context: str, thought_process: str, query_param: Query
     documents = [row[content_idx] for row in rows]    
     
     # Get reranked results with scores
-    reranked = await voyageai_rerank(thought_process, documents, model=rerank_model, top_k=query_param.rerank_top_k)
+    reranked = await voyageai_rerank(query_str, documents, model=rerank_model, top_k=query_param.rerank_top_k)
     
     # Create mapping of content to original row to preserve metadata
     content_to_row = {row[content_idx]: row for row in rows}
@@ -835,7 +838,7 @@ async def _get_chunks_from_keywords(
 
 
 async def _build_query_context(
-    thought_process: str,
+    query: str,
     keywords: list,
     knowledge_graph_inst: BaseGraphStorage,
     entities_vdb: BaseVectorStorage,
@@ -928,14 +931,15 @@ async def _build_query_context(
 
     if query_param.rerank_enabled:
         rerank_model = global_config["rerank_model"]
+        logger.info(f"Reranking with query: {query}")
         logger.info(f"Reranking summaries to {query_param.rerank_top_k} results")
-        summary_csv = await _rerank_context(summary_csv, thought_process, query_param, rerank_model)
+        summary_csv = await _rerank_context(summary_csv, query, query_param, rerank_model)
         logger.info(f"Reranking entities to {query_param.rerank_top_k} results")
-        entities_context = await _rerank_context(entities_context, thought_process, query_param, rerank_model)
+        entities_context = await _rerank_context(entities_context, query, query_param, rerank_model)
         logger.info(f"Reranking relationships to {query_param.rerank_top_k} results")
-        relations_context = await _rerank_context(relations_context, thought_process, query_param, rerank_model)
+        relations_context = await _rerank_context(relations_context, query, query_param, rerank_model)
         logger.info(f"Reranking text units to {query_param.rerank_top_k} results")
-        text_units_context = await _rerank_context(text_units_context, thought_process, query_param, rerank_model)
+        text_units_context = await _rerank_context(text_units_context, query, query_param, rerank_model)
 
     return f"""
 -----Summaries-----
