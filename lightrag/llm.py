@@ -28,7 +28,7 @@ from tenacity import (
 )
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from anthropic import AsyncAnthropic
+from anthropic import AsyncAnthropic, Timeout
 
 from .utils import (
     wrap_embedding_func_with_attrs,

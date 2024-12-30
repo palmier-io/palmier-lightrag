@@ -673,6 +673,7 @@ async def kg_query(
     )
     if query_param.only_need_prompt:
         return QueryResult(answer=sys_prompt, reasoning=reasoning)
+    logger.info("Generating final response")
     response = await use_model_func(
         query,
         system_prompt=sys_prompt,
@@ -952,16 +953,15 @@ async def _build_query_context(
 
     if query_param.rerank_enabled:
         rerank_model = global_config["rerank_model"]
-        logger.info(f"Reranking with query: {query}")
-        logger.info(f"Reranking summaries to {query_param.rerank_top_k} results")
-        summary_csv = await _rerank_context(summary_csv, query, query_param, rerank_model)
-        logger.info(f"Reranking entities to {query_param.rerank_top_k} results")
-        entities_context = await _rerank_context(entities_context, query, query_param, rerank_model)
-        logger.info(f"Reranking relationships to {query_param.rerank_top_k} results")
-        relations_context = await _rerank_context(relations_context, query, query_param, rerank_model)
-        logger.info(f"Reranking text units to {query_param.rerank_top_k} results")
-        text_units_context = await _rerank_context(text_units_context, query, query_param, rerank_model)
-
+        logger.info("Reranking all contexts")
+        
+        # Process all reranking operations in parallel
+        summary_csv, entities_context, relations_context, text_units_context = await asyncio.gather(
+            _rerank_context(summary_csv, query, query_param, rerank_model),
+            _rerank_context(entities_context, query, query_param, rerank_model),
+            _rerank_context(relations_context, query, query_param, rerank_model), 
+            _rerank_context(text_units_context, query, query_param, rerank_model)
+        )
     return f"""
 -----Summaries-----
 ```csv
