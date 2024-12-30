@@ -5,6 +5,7 @@ anthropic
 
 # database packages
 graspologic
+gremlinpython
 hnswlib
 nano-vectordb
 neo4j
@@ -14,13 +15,18 @@ ollama
 openai
 oracledb
 pygments
+psycopg[binary,pool]
 pymilvus
 pymongo
+pymysql
 pyvis
 qdrant-client
 supabase
 tenacity
 # lmdeploy[all]
+sqlalchemy
+tenacity
+
 
 # LLM packages
 tiktoken

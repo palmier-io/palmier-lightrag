@@ -31,6 +31,7 @@ from .base import (
     QueryParam,
     QueryResult,
 )
+from .chunking.language_parsers import EXTRACT_ENTITIES_SUPPORT_LANGUAGES
 from .llm import voyageai_rerank
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
 
@@ -141,12 +142,12 @@ async def _merge_nodes_then_upsert(
     global_config: dict,
 ):
     source_descriptions = {}
-    already_entitiy_types = []
+    already_entity_types = []
 
     # Get existing node data if it exists
     already_node = await knowledge_graph_inst.get_node(entity_name)
     if already_node is not None:
-        already_entitiy_types.append(already_node["entity_type"])
+        already_entity_types.append(already_node["entity_type"])
         # Split and recreate the mapping from existing data
         existing_sources = split_string_by_multi_markers(
             already_node["source_id"], [GRAPH_FIELD_SEP]
@@ -160,11 +161,13 @@ async def _merge_nodes_then_upsert(
     # Add new data to the mapping
     for dp in nodes_data:
         source_descriptions[dp["source_id"]] = dp["description"]
-        already_entitiy_types.append(dp["entity_type"])
+        already_entity_types.append(dp["entity_type"])
 
     # Get most common entity type
     entity_type = sorted(
-        Counter(already_entitiy_types).items(),
+        Counter(
+            [dp["entity_type"] for dp in nodes_data] + already_entity_types
+        ).items(),
         key=lambda x: x[1],
         reverse=True,
     )[0][0]
@@ -269,10 +272,14 @@ async def extract_entities(
     use_llm_func: callable = global_config["llm_model_func"]
     entity_extract_max_gleaning = global_config["entity_extract_max_gleaning"]
 
-    ordered_chunks = list(chunks.items())
+    ordered_chunks = list(c for c in chunks.items())
+    logger.debug(f"Extracting entities from {len(ordered_chunks)} chunks")
     # add language and example number params to prompt
     language = global_config["addon_params"].get(
         "language", PROMPTS["DEFAULT_LANGUAGE"]
+    )
+    entity_types = global_config["addon_params"].get(
+        "entity_types", PROMPTS["DEFAULT_ENTITY_TYPES"]
     )
     example_number = global_config["addon_params"].get("example_number", None)
     if example_number and example_number < len(PROMPTS["entity_extraction_examples"]):
@@ -297,7 +304,7 @@ async def extract_entities(
         tuple_delimiter=PROMPTS["DEFAULT_TUPLE_DELIMITER"],
         record_delimiter=PROMPTS["DEFAULT_RECORD_DELIMITER"],
         completion_delimiter=PROMPTS["DEFAULT_COMPLETION_DELIMITER"],
-        entity_types=",".join(PROMPTS["DEFAULT_ENTITY_TYPES"]),
+        entity_types=",".join(entity_types),
         examples=examples,
         language=language,
     )
@@ -432,14 +439,16 @@ async def extract_entities(
     ):
         all_relationships_data.append(await result)
 
-    if not len(all_entities_data):
-        logger.warning("Didn't extract any entities, maybe your LLM is not working")
-        return None
-    if not len(all_relationships_data):
+    if not len(all_entities_data) and not len(all_relationships_data):
         logger.warning(
-            "Didn't extract any relationships, maybe your LLM is not working"
+            "Didn't extract any entities and relationships, maybe your LLM is not working"
         )
         return None
+
+    if not len(all_entities_data):
+        logger.warning("Didn't extract any entities")
+    if not len(all_relationships_data):
+        logger.warning("Didn't extract any relationships")
 
     if entity_vdb is not None:
         data_for_vdb = {
@@ -851,6 +860,7 @@ async def _build_query_context(
     global_config: dict,
 ):
     ll_keywords, hl_keywords = keywords[0], keywords[1]
+
     if query_param.mode in ["local", "hybrid"]:
         if ll_keywords == "":
             ll_entities_context, ll_relations_context, ll_text_units_context = (
@@ -897,6 +907,13 @@ async def _build_query_context(
                 text_chunks_db,
                 query_param,
             )
+            if (
+                hl_entities_context == ""
+                and hl_relations_context == ""
+                and hl_text_units_context == ""
+            ):
+                logger.warn("No high level context found. Switching to local mode.")
+                query_param.mode = "local"
     if query_param.mode == "hybrid":
         entities_context, relations_context, text_units_context = combine_contexts(
             [hl_entities_context, ll_entities_context],
