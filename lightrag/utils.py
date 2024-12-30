@@ -329,7 +329,9 @@ def process_combine_contexts(hl, ll):
         row = [str(i)] + item
         result_rows.append(row)
 
-    logger.info(f"Merged {len(list_hl)} and {len(list_ll)} sources into {len(result_rows)} sources")
+    logger.info(
+        f"Merged {len(list_hl)} and {len(list_ll)} sources into {len(result_rows)} sources"
+    )
     return list_of_list_to_csv(result_rows)
 
 

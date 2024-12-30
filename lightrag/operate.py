@@ -294,7 +294,9 @@ async def extract_entities(
         tuple_delimiter=PROMPTS["DEFAULT_TUPLE_DELIMITER"],
         record_delimiter=PROMPTS["DEFAULT_RECORD_DELIMITER"],
         completion_delimiter=PROMPTS["DEFAULT_COMPLETION_DELIMITER"],
-        entity_types=",".join([f"{k}:{v}" for k,v in PROMPTS["DEFAULT_ENTITY_TYPES"].items()]),
+        entity_types=",".join(
+            [f"{k}:{v}" for k, v in PROMPTS["DEFAULT_ENTITY_TYPES"].items()]
+        ),
         language=language,
     )
     # add example's format
@@ -660,7 +662,9 @@ async def kg_query(
         chunks_csv,
         global_config,
     )
-    reasoning = dict(keywords_data) if query_param.include_reasoning and keywords_data else None
+    reasoning = (
+        dict(keywords_data) if query_param.include_reasoning and keywords_data else None
+    )
     if query_param.only_need_context:
         return QueryResult(context=context, reasoning=reasoning)
     if context is None:
@@ -705,50 +709,58 @@ async def kg_query(
     )
     return QueryResult(answer=response, reasoning=reasoning)
 
-async def _rerank_context(context: str, query_str: str, query_param: QueryParam, rerank_model: str):
+
+async def _rerank_context(
+    context: str, query_str: str, query_param: QueryParam, rerank_model: str
+):
     """
     Rerank the context using voyage_rerank while preserving metadata.
     It compares the content (sources, summaries) or description (entities, relationships) with the user query + thought_process of the LLM.
     """
     if not context.strip():
         return context
-        
+
     # Parse CSV context into list of lists
     context_list = csv_string_to_list(context)
     if len(context_list) <= 1:  # Only header or empty
         return context
-        
+
     header = context_list[0]
     rows = context_list[1:]
-    
+
     # Extract content column index based on header
     content_idx = None
     for i, col in enumerate(header):
         if col.lower() == "content" or col.lower() == "description":
             content_idx = i
             break
-    
+
     if content_idx is None:
         return context  # No content/description column found
-        
+
     # Extract documents for reranking
-    documents = [row[content_idx] for row in rows]    
-    
+    documents = [row[content_idx] for row in rows]
+
     # Get reranked results with scores
-    reranked = await voyageai_rerank(query_str, documents, model=rerank_model, top_k=query_param.rerank_top_k)
-    
+    reranked = await voyageai_rerank(
+        query_str, documents, model=rerank_model, top_k=query_param.rerank_top_k
+    )
+
     # Create mapping of content to original row to preserve metadata
     content_to_row = {row[content_idx]: row for row in rows}
-    
+
     # Rebuild rows in reranked order with original metadata
     reranked_rows = []
     for result in reranked:  # result is a RerankingResult
-        original_row = content_to_row[result.document]  # Use .document to access the field
+        original_row = content_to_row[
+            result.document
+        ]  # Use .document to access the field
         reranked_rows.append(original_row)
-    
+
     # Reconstruct CSV with header and reranked rows
     reranked_context = list_of_list_to_csv([header] + reranked_rows)
     return reranked_context
+
 
 async def _get_summaries_from_query(
     query: str,
@@ -954,13 +966,18 @@ async def _build_query_context(
     if query_param.rerank_enabled:
         rerank_model = global_config["rerank_model"]
         logger.info("Reranking all contexts")
-        
+
         # Process all reranking operations in parallel
-        summary_csv, entities_context, relations_context, text_units_context = await asyncio.gather(
+        (
+            summary_csv,
+            entities_context,
+            relations_context,
+            text_units_context,
+        ) = await asyncio.gather(
             _rerank_context(summary_csv, query, query_param, rerank_model),
             _rerank_context(entities_context, query, query_param, rerank_model),
-            _rerank_context(relations_context, query, query_param, rerank_model), 
-            _rerank_context(text_units_context, query, query_param, rerank_model)
+            _rerank_context(relations_context, query, query_param, rerank_model),
+            _rerank_context(text_units_context, query, query_param, rerank_model),
         )
     return f"""
 -----Summaries-----
@@ -1489,6 +1506,7 @@ async def naive_query(
     )
 
     return QueryResult(answer=response)
+
 
 async def mix_kg_vector_query(
     query,

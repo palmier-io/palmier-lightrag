@@ -106,9 +106,13 @@ QdrantStorage = lazy_external_import("lightrag.kg.qdrant_impl", "QdrantStorage")
 NeptuneCypherStorage = lazy_external_import(
     "lightrag.kg.neptune_impl", "NeptuneCypherStorage"
 )
-ChromaVectorDBStorage = lazy_external_import("lightrag.kg.chroma_impl", "ChromaVectorDBStorage")
+ChromaVectorDBStorage = lazy_external_import(
+    "lightrag.kg.chroma_impl", "ChromaVectorDBStorage"
+)
 TiDBKVStorage = lazy_external_import("lightrag.kg.tidb_impl", "TiDBKVStorage")
-TiDBVectorDBStorage = lazy_external_import("lightrag.kg.tidb_impl", "TiDBVectorDBStorage")
+TiDBVectorDBStorage = lazy_external_import(
+    "lightrag.kg.tidb_impl", "TiDBVectorDBStorage"
+)
 TiDBGraphStorage = lazy_external_import("lightrag.kg.tidb_impl", "TiDBGraphStorage")
 AGEStorage = lazy_external_import("lightrag.kg.age_impl", "AGEStorage")
 GremlinStorage = lazy_external_import("lightrag.kg.gremlin_impl", "GremlinStorage")
@@ -238,13 +242,21 @@ class LightRAG:
             return partial(storage_cls, **storage_params)
 
         # Initialize all storage classes with their specific params
-        self.docs_storage_cls: Type[BaseKVStorage] = get_storage_with_params(self.docs_storage)
-        self.chunks_storage_cls: Type[BaseKVStorage] = get_storage_with_params(self.chunks_storage)
-        self.llm_response_cache_storage_cls: Type[BaseKVStorage] = get_storage_with_params(
-            self.llm_response_cache_storage
+        self.docs_storage_cls: Type[BaseKVStorage] = get_storage_with_params(
+            self.docs_storage
         )
-        self.vector_db_storage_cls: Type[BaseVectorStorage] = get_storage_with_params(self.vector_storage)
-        self.graph_storage_cls: Type[BaseGraphStorage] = get_storage_with_params(self.graph_storage)
+        self.chunks_storage_cls: Type[BaseKVStorage] = get_storage_with_params(
+            self.chunks_storage
+        )
+        self.llm_response_cache_storage_cls: Type[BaseKVStorage] = (
+            get_storage_with_params(self.llm_response_cache_storage)
+        )
+        self.vector_db_storage_cls: Type[BaseVectorStorage] = get_storage_with_params(
+            self.vector_storage
+        )
+        self.graph_storage_cls: Type[BaseGraphStorage] = get_storage_with_params(
+            self.graph_storage
+        )
 
         if not os.path.exists(self.working_dir):
             logger.info(f"Creating working directory {self.working_dir}")
@@ -455,9 +467,16 @@ class LightRAG:
                 logger.info(f"[New Chunks] inserting {len(adding_chunks)} chunks")
                 await self.chunks_vdb.upsert(adding_chunks)
                 await self.text_chunks.upsert(adding_chunks)
-            
-            extract_entities_chunks = {k: v for k, v in adding_chunks.items() if v["tag"] and v["tag"]["language"] in EXTRACT_ENTITIES_SUPPORT_LANGUAGES}
-            logger.info(f"[Entity Extraction] Processing {len(extract_entities_chunks)} chunks")
+
+            extract_entities_chunks = {
+                k: v
+                for k, v in adding_chunks.items()
+                if v["tag"]
+                and v["tag"]["language"] in EXTRACT_ENTITIES_SUPPORT_LANGUAGES
+            }
+            logger.info(
+                f"[Entity Extraction] Processing {len(extract_entities_chunks)} chunks"
+            )
             await self.chunk_entity_relation_graph.create_index()
             maybe_new_kg = await extract_entities(
                 extract_entities_chunks,

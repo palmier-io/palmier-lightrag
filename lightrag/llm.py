@@ -67,7 +67,9 @@ async def openai_complete_if_cache(
     #     os.environ["OPENAI_API_KEY"] = api_key
 
     openai_async_client = (
-        AsyncOpenAI() if base_url is None else AsyncOpenAI(base_url=base_url, api_key=api_key)
+        AsyncOpenAI()
+        if base_url is None
+        else AsyncOpenAI(base_url=base_url, api_key=api_key)
     )
     kwargs.pop("hashing_kv", None)
     kwargs.pop("keyword_extraction", None)
@@ -230,8 +232,6 @@ async def anthropic_complete_if_cache(
         **kwargs,
     )
     return response.content[0].text
-
-
 
 
 class BedrockError(Exception):
@@ -1228,6 +1228,7 @@ async def ollama_embed(texts: list[str], embed_model, **kwargs) -> np.ndarray:
     data = ollama_client.embed(model=embed_model, input=texts)
     return data["embeddings"]
 
+
 async def lollms_embed(
     texts: List[str], embed_model=None, base_url="http://localhost:9600", **kwargs
 ) -> np.ndarray:
@@ -1256,12 +1257,14 @@ async def lollms_embed(
 
         return np.array(embeddings)
 
+
 async def voyageai_rerank(
     query: str, documents: list[str], model: str = "rerank-2", top_k: int = 10
 ) -> list[dict]:
     client = voyageai.Client()
     reranking = client.rerank(query, documents, model=model, top_k=top_k)
     return reranking.results
+
 
 class Model(BaseModel):
     """

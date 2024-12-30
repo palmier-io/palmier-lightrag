@@ -444,6 +444,7 @@ class NetworkXStorage(BaseGraphStorage):
             )
             os.remove(self._graphml_xml_file)
 
+
 @dataclass
 class JsonDocStatusStorage(DocStatusStorage):
     """JSON implementation of document status storage"""

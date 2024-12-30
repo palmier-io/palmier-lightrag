@@ -217,7 +217,7 @@ async def update_summary_recursive(
             for child_path in child_paths
         )
     )
-    
+
     # Filter out None values
     children_nodes = [node for node in children_nodes if node]
 

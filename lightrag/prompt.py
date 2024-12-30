@@ -18,31 +18,13 @@ PROMPTS["DEFAULT_ENTITY_TYPES"] = {
         "package",
         "library",
         "constant",
-        "interface"
+        "interface",
     ],
-    "script": [
-        "file",
-        "script",
-        "command",
-        "configuration",
-        "dependency",
-        "service"
-    ],
-    "test": [
-        "file"
-    ],
-    "example": [
-        "file"
-    ],
-    "documentation": [
-        "file",
-        "component",
-        "service",
-        "architecture",
-        "design pattern"
-    ],
+    "script": ["file", "script", "command", "configuration", "dependency", "service"],
+    "test": ["file"],
+    "example": ["file"],
+    "documentation": ["file", "component", "service", "architecture", "design pattern"],
 }
-
 
 
 PROMPTS["entity_extraction"] = """
@@ -89,7 +71,7 @@ Your objective is to identify:
 Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
 
 3. Content-Level Keywords:
-Identify high-level keywords or topics that describe the overarching themes, concepts, or functionalities of the file. 
+Identify high-level keywords or topics that describe the overarching themes, concepts, or functionalities of the file.
 Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
 
 4. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use {record_delimiter} as the list delimiter.

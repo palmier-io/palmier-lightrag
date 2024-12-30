@@ -14,17 +14,16 @@ networkx
 ollama
 openai
 oracledb
-pygments
 psycopg[binary,pool]
+pygments
 pymilvus
 pymongo
 pymysql
 pyvis
 qdrant-client
-supabase
-tenacity
 # lmdeploy[all]
 sqlalchemy
+supabase
 tenacity
 
 
