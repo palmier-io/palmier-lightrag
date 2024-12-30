@@ -240,6 +240,12 @@ The data table includes:
 If you don't know the answer, just say so. Do not make anything up.
 Do not include information where the supporting evidence for it is not provided.
 
+When handling relationships with timestamps:
+1. Each relationship has a "created_at" timestamp indicating when we acquired this knowledge
+2. When encountering conflicting relationships, consider both the semantic content and the timestamp
+3. Don't automatically prefer the most recently created relationships - use judgment based on the context
+4. For time-specific queries, prioritize temporal information in the content before considering creation timestamps
+
 ---Target response length and format---
 
 {response_type}
@@ -248,8 +254,7 @@ Do not include information where the supporting evidence for it is not provided.
 
 {context_data}
 
-Add sections and commentary to the response as appropriate for the length and format. Style the response in markdown.
-"""
+Add sections and commentary to the response as appropriate for the length and format. Style the response in markdown."""
 
 PROMPTS["keywords_extraction"] = """---Role---
 
@@ -395,6 +400,12 @@ Generate a response of the target length and format that responds to the user's 
 If you don't know the answer, just say so. Do not make anything up.
 Do not include information where the supporting evidence for it is not provided.
 
+When handling content with timestamps:
+1. Each piece of content has a "created_at" timestamp indicating when we acquired this knowledge
+2. When encountering conflicting information, consider both the content and the timestamp
+3. Don't automatically prefer the most recent content - use judgment based on the context
+4. For time-specific queries, prioritize temporal information in the content before considering creation timestamps
+
 ---Target response length and format---
 
 {response_type}
@@ -491,3 +502,37 @@ File content:
 
 Provide a summary of the file's purpose in a single paragraph.
 """
+PROMPTS["mix_rag_response"] = """---Role---
+
+You are a professional assistant responsible for answering questions based on knowledge graph and textual information. Please respond in the same language as the user's question.
+
+---Goal---
+
+Generate a concise response that summarizes relevant points from the provided information. If you don't know the answer, just say so. Do not make anything up or include information where the supporting evidence is not provided.
+
+When handling information with timestamps:
+1. Each piece of information (both relationships and content) has a "created_at" timestamp indicating when we acquired this knowledge
+2. When encountering conflicting information, consider both the content/relationship and the timestamp
+3. Don't automatically prefer the most recent information - use judgment based on the context
+4. For time-specific queries, prioritize temporal information in the content before considering creation timestamps
+
+---Data Sources---
+
+1. Knowledge Graph Data:
+{kg_context}
+
+2. Vector Data:
+{vector_context}
+
+---Response Requirements---
+
+- Target format and length: {response_type}
+- Use markdown formatting with appropriate section headings
+- Aim to keep content around 3 paragraphs for conciseness
+- Each paragraph should be under a relevant section heading
+- Each section should focus on one main point or aspect of the answer
+- Use clear and descriptive section titles that reflect the content
+- List up to 5 most important reference sources at the end under "References", clearly indicating whether each source is from Knowledge Graph (KG) or Vector Data (VD)
+  Format: [KG/VD] Source content
+
+Add sections and commentary to the response as appropriate for the length and format. If the provided information is insufficient to answer the question, clearly state that you don't know or cannot provide an answer in the same language as the user's question."""
