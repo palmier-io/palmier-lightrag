@@ -8,7 +8,7 @@ from enum import Enum
 from dataclasses import dataclass
 from lightrag.chunking.language_parsers import (
     get_language_from_file,
-    SUPPORT_LANGUAGES,
+    CHUNKING_SUPPORT_LANGUAGES,
     FILES_TO_IGNORE,
 )
 
@@ -177,7 +177,7 @@ class CodeChunker:
 
         if language_name == "text only":
             chunks = self._chunking_by_token_size(content, relative_file_path)
-        elif language_name in SUPPORT_LANGUAGES:
+        elif language_name in CHUNKING_SUPPORT_LANGUAGES:
             content_bytes = content.encode("utf-8")
             chunks = self._chunking_by_tree_sitter(
                 content_bytes, language_name, relative_file_path

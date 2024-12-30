@@ -3,10 +3,11 @@ import html
 import os
 from tqdm.asyncio import tqdm as tqdm_async
 from dataclasses import dataclass
-from typing import Any, Union, cast
+from typing import Any, Union, cast, Dict
 import networkx as nx
 import numpy as np
 from nano_vectordb import NanoVectorDB
+import time
 
 from .utils import (
     logger,
@@ -20,6 +21,9 @@ from .base import (
     BaseGraphStorage,
     BaseKVStorage,
     BaseVectorStorage,
+    DocStatus,
+    DocProcessingStatus,
+    DocStatusStorage,
 )
 
 from .prompt import GRAPH_FIELD_SEP
@@ -105,9 +109,12 @@ class NanoVectorDBStorage(BaseVectorStorage):
         if not len(data):
             logger.warning("You insert an empty data to vector DB")
             return []
+
+        current_time = time.time()
         list_data = [
             {
                 "__id__": k,
+                "__created_at__": current_time,
                 **{k1: v1 for k1, v1 in v.items() if k1 in self.meta_fields},
             }
             for k, v in data.items()
@@ -155,6 +162,7 @@ class NanoVectorDBStorage(BaseVectorStorage):
                 "id": dp["__id__"],
                 "distance": dp["__metrics__"],
                 "score": dp["__metrics__"],
+                "created_at": dp.get("__created_at__"),
             }
             for dp in results
         ]
@@ -435,3 +443,53 @@ class NetworkXStorage(BaseGraphStorage):
                 f"Removing NetworkX Graph Storage file {self._graphml_xml_file}..."
             )
             os.remove(self._graphml_xml_file)
+
+
+@dataclass
+class JsonDocStatusStorage(DocStatusStorage):
+    """JSON implementation of document status storage"""
+
+    def __post_init__(self):
+        working_dir = self.global_config["working_dir"]
+        self._file_name = os.path.join(working_dir, f"kv_store_{self.namespace}.json")
+        self._data = load_json(self._file_name) or {}
+        logger.info(f"Loaded document status storage with {len(self._data)} records")
+
+    async def filter_keys(self, data: list[str]) -> set[str]:
+        """Return keys that should be processed (not in storage or not successfully processed)"""
+        return set(
+            [
+                k
+                for k in data
+                if k not in self._data or self._data[k]["status"] != DocStatus.PROCESSED
+            ]
+        )
+
+    async def get_status_counts(self) -> Dict[str, int]:
+        """Get counts of documents in each status"""
+        counts = {status: 0 for status in DocStatus}
+        for doc in self._data.values():
+            counts[doc["status"]] += 1
+        return counts
+
+    async def get_failed_docs(self) -> Dict[str, DocProcessingStatus]:
+        """Get all failed documents"""
+        return {k: v for k, v in self._data.items() if v["status"] == DocStatus.FAILED}
+
+    async def get_pending_docs(self) -> Dict[str, DocProcessingStatus]:
+        """Get all pending documents"""
+        return {k: v for k, v in self._data.items() if v["status"] == DocStatus.PENDING}
+
+    async def index_done_callback(self):
+        """Save data to file after indexing"""
+        write_json(self._data, self._file_name)
+
+    async def upsert(self, data: dict[str, dict]):
+        """Update or insert document status
+
+        Args:
+            data: Dictionary of document IDs and their status data
+        """
+        self._data.update(data)
+        await self.index_done_callback()
+        return data

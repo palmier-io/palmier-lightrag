@@ -33,6 +33,7 @@ from .base import (
 )
 from .llm import voyageai_rerank
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
+import time
 
 
 def chunking_by_token_size(
@@ -131,6 +132,7 @@ async def _handle_single_relationship_extraction(
         description=edge_description,
         keywords=edge_keywords,
         source_id=edge_source_id,
+        metadata={"created_at": time.time()},
     )
 
 
@@ -141,12 +143,12 @@ async def _merge_nodes_then_upsert(
     global_config: dict,
 ):
     source_descriptions = {}
-    already_entitiy_types = []
+    already_entity_types = []
 
     # Get existing node data if it exists
     already_node = await knowledge_graph_inst.get_node(entity_name)
     if already_node is not None:
-        already_entitiy_types.append(already_node["entity_type"])
+        already_entity_types.append(already_node["entity_type"])
         # Split and recreate the mapping from existing data
         existing_sources = split_string_by_multi_markers(
             already_node["source_id"], [GRAPH_FIELD_SEP]
@@ -160,11 +162,13 @@ async def _merge_nodes_then_upsert(
     # Add new data to the mapping
     for dp in nodes_data:
         source_descriptions[dp["source_id"]] = dp["description"]
-        already_entitiy_types.append(dp["entity_type"])
+        already_entity_types.append(dp["entity_type"])
 
     # Get most common entity type
     entity_type = sorted(
-        Counter(already_entitiy_types).items(),
+        Counter(
+            [dp["entity_type"] for dp in nodes_data] + already_entity_types
+        ).items(),
         key=lambda x: x[1],
         reverse=True,
     )[0][0]
@@ -269,10 +273,14 @@ async def extract_entities(
     use_llm_func: callable = global_config["llm_model_func"]
     entity_extract_max_gleaning = global_config["entity_extract_max_gleaning"]
 
-    ordered_chunks = list(chunks.items())
+    ordered_chunks = list(c for c in chunks.items())
+    logger.debug(f"Extracting entities from {len(ordered_chunks)} chunks")
     # add language and example number params to prompt
     language = global_config["addon_params"].get(
         "language", PROMPTS["DEFAULT_LANGUAGE"]
+    )
+    entity_types = global_config["addon_params"].get(
+        "entity_types", PROMPTS["DEFAULT_ENTITY_TYPES"]
     )
     example_number = global_config["addon_params"].get("example_number", None)
     if example_number and example_number < len(PROMPTS["entity_extraction_examples"]):
@@ -286,7 +294,9 @@ async def extract_entities(
         tuple_delimiter=PROMPTS["DEFAULT_TUPLE_DELIMITER"],
         record_delimiter=PROMPTS["DEFAULT_RECORD_DELIMITER"],
         completion_delimiter=PROMPTS["DEFAULT_COMPLETION_DELIMITER"],
-        entity_types=",".join([f"{k}:{v}" for k,v in PROMPTS["DEFAULT_ENTITY_TYPES"].items()]),
+        entity_types=",".join(
+            [f"{k}:{v}" for k, v in PROMPTS["DEFAULT_ENTITY_TYPES"].items()]
+        ),
         language=language,
     )
     # add example's format
@@ -297,7 +307,7 @@ async def extract_entities(
         tuple_delimiter=PROMPTS["DEFAULT_TUPLE_DELIMITER"],
         record_delimiter=PROMPTS["DEFAULT_RECORD_DELIMITER"],
         completion_delimiter=PROMPTS["DEFAULT_COMPLETION_DELIMITER"],
-        entity_types=",".join(PROMPTS["DEFAULT_ENTITY_TYPES"]),
+        entity_types=",".join(entity_types),
         examples=examples,
         language=language,
     )
@@ -432,14 +442,16 @@ async def extract_entities(
     ):
         all_relationships_data.append(await result)
 
-    if not len(all_entities_data):
-        logger.warning("Didn't extract any entities, maybe your LLM is not working")
-        return None
-    if not len(all_relationships_data):
+    if not len(all_entities_data) and not len(all_relationships_data):
         logger.warning(
-            "Didn't extract any relationships, maybe your LLM is not working"
+            "Didn't extract any entities and relationships, maybe your LLM is not working"
         )
         return None
+
+    if not len(all_entities_data):
+        logger.warning("Didn't extract any entities")
+    if not len(all_relationships_data):
+        logger.warning("Didn't extract any relationships")
 
     if entity_vdb is not None:
         data_for_vdb = {
@@ -460,6 +472,9 @@ async def extract_entities(
                 + dp["src_id"]
                 + dp["tgt_id"]
                 + dp["description"],
+                "metadata": {
+                    "created_at": dp.get("metadata", {}).get("created_at", time.time())
+                },
             }
             for dp in all_relationships_data
         }
@@ -647,7 +662,9 @@ async def kg_query(
         chunks_csv,
         global_config,
     )
-    reasoning = dict(keywords_data) if query_param.include_reasoning and keywords_data else None
+    reasoning = (
+        dict(keywords_data) if query_param.include_reasoning and keywords_data else None
+    )
     if query_param.only_need_context:
         return QueryResult(context=context, reasoning=reasoning)
     if context is None:
@@ -660,6 +677,7 @@ async def kg_query(
     )
     if query_param.only_need_prompt:
         return QueryResult(answer=sys_prompt, reasoning=reasoning)
+    logger.info("Generating final response")
     response = await use_model_func(
         query,
         system_prompt=sys_prompt,
@@ -691,50 +709,58 @@ async def kg_query(
     )
     return QueryResult(answer=response, reasoning=reasoning)
 
-async def _rerank_context(context: str, query_str: str, query_param: QueryParam, rerank_model: str):
+
+async def _rerank_context(
+    context: str, query_str: str, query_param: QueryParam, rerank_model: str
+):
     """
     Rerank the context using voyage_rerank while preserving metadata.
     It compares the content (sources, summaries) or description (entities, relationships) with the user query + thought_process of the LLM.
     """
     if not context.strip():
         return context
-        
+
     # Parse CSV context into list of lists
     context_list = csv_string_to_list(context)
     if len(context_list) <= 1:  # Only header or empty
         return context
-        
+
     header = context_list[0]
     rows = context_list[1:]
-    
+
     # Extract content column index based on header
     content_idx = None
     for i, col in enumerate(header):
         if col.lower() == "content" or col.lower() == "description":
             content_idx = i
             break
-    
+
     if content_idx is None:
         return context  # No content/description column found
-        
+
     # Extract documents for reranking
-    documents = [row[content_idx] for row in rows]    
-    
+    documents = [row[content_idx] for row in rows]
+
     # Get reranked results with scores
-    reranked = await voyageai_rerank(query_str, documents, model=rerank_model, top_k=query_param.rerank_top_k)
-    
+    reranked = await voyageai_rerank(
+        query_str, documents, model=rerank_model, top_k=query_param.rerank_top_k
+    )
+
     # Create mapping of content to original row to preserve metadata
     content_to_row = {row[content_idx]: row for row in rows}
-    
+
     # Rebuild rows in reranked order with original metadata
     reranked_rows = []
     for result in reranked:  # result is a RerankingResult
-        original_row = content_to_row[result.document]  # Use .document to access the field
+        original_row = content_to_row[
+            result.document
+        ]  # Use .document to access the field
         reranked_rows.append(original_row)
-    
+
     # Reconstruct CSV with header and reranked rows
     reranked_context = list_of_list_to_csv([header] + reranked_rows)
     return reranked_context
+
 
 async def _get_summaries_from_query(
     query: str,
@@ -851,6 +877,7 @@ async def _build_query_context(
     global_config: dict,
 ):
     ll_keywords, hl_keywords = keywords[0], keywords[1]
+
     if query_param.mode in ["local", "hybrid"]:
         if ll_keywords == "":
             ll_entities_context, ll_relations_context, ll_text_units_context = (
@@ -897,6 +924,13 @@ async def _build_query_context(
                 text_chunks_db,
                 query_param,
             )
+            if (
+                hl_entities_context == ""
+                and hl_relations_context == ""
+                and hl_text_units_context == ""
+            ):
+                logger.warn("No high level context found. Switching to local mode.")
+                query_param.mode = "local"
     if query_param.mode == "hybrid":
         entities_context, relations_context, text_units_context = combine_contexts(
             [hl_entities_context, ll_entities_context],
@@ -931,16 +965,20 @@ async def _build_query_context(
 
     if query_param.rerank_enabled:
         rerank_model = global_config["rerank_model"]
-        logger.info(f"Reranking with query: {query}")
-        logger.info(f"Reranking summaries to {query_param.rerank_top_k} results")
-        summary_csv = await _rerank_context(summary_csv, query, query_param, rerank_model)
-        logger.info(f"Reranking entities to {query_param.rerank_top_k} results")
-        entities_context = await _rerank_context(entities_context, query, query_param, rerank_model)
-        logger.info(f"Reranking relationships to {query_param.rerank_top_k} results")
-        relations_context = await _rerank_context(relations_context, query, query_param, rerank_model)
-        logger.info(f"Reranking text units to {query_param.rerank_top_k} results")
-        text_units_context = await _rerank_context(text_units_context, query, query_param, rerank_model)
+        logger.info("Reranking all contexts")
 
+        # Process all reranking operations in parallel
+        (
+            summary_csv,
+            entities_context,
+            relations_context,
+            text_units_context,
+        ) = await asyncio.gather(
+            _rerank_context(summary_csv, query, query_param, rerank_model),
+            _rerank_context(entities_context, query, query_param, rerank_model),
+            _rerank_context(relations_context, query, query_param, rerank_model),
+            _rerank_context(text_units_context, query, query_param, rerank_model),
+        )
     return f"""
 -----Summaries-----
 ```csv
@@ -1015,9 +1053,22 @@ async def _get_node_data(
     entities_context = list_of_list_to_csv(entites_section_list)
 
     relations_section_list = [
-        ["id", "source", "target", "description", "keywords", "weight", "rank"]
+        [
+            "id",
+            "source",
+            "target",
+            "description",
+            "keywords",
+            "weight",
+            "rank",
+            "created_at",
+        ]
     ]
     for i, e in enumerate(use_relations):
+        created_at = e.get("created_at", "UNKNOWN")
+        # Convert timestamp to readable format
+        if isinstance(created_at, (int, float)):
+            created_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created_at))
         relations_section_list.append(
             [
                 i,
@@ -1027,6 +1078,7 @@ async def _get_node_data(
                 e["keywords"],
                 e["weight"],
                 e["rank"],
+                created_at,
             ]
         )
     relations_context = list_of_list_to_csv(relations_section_list)
@@ -1176,7 +1228,13 @@ async def _get_edge_data(
         *[knowledge_graph_inst.edge_degree(r["src_id"], r["tgt_id"]) for r in results]
     )
     edge_datas = [
-        {"src_id": k["src_id"], "tgt_id": k["tgt_id"], "rank": d, **v}
+        {
+            "src_id": k["src_id"],
+            "tgt_id": k["tgt_id"],
+            "rank": d,
+            "created_at": k.get("__created_at__", None),  # 从 KV 存储中获取时间元数据
+            **v,
+        }
         for k, v, d in zip(results, edge_datas, edge_degree)
         if v is not None
     ]
@@ -1200,9 +1258,22 @@ async def _get_edge_data(
     )
 
     relations_section_list = [
-        ["id", "source", "target", "description", "keywords", "weight", "rank"]
+        [
+            "id",
+            "source",
+            "target",
+            "description",
+            "keywords",
+            "weight",
+            "rank",
+            "created_at",
+        ]
     ]
     for i, e in enumerate(edge_datas):
+        created_at = e.get("created_at", "Unknown")
+        # Convert timestamp to readable format
+        if isinstance(created_at, (int, float)):
+            created_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created_at))
         relations_section_list.append(
             [
                 i,
@@ -1212,6 +1283,7 @@ async def _get_edge_data(
                 e["keywords"],
                 e["weight"],
                 e["rank"],
+                created_at,
             ]
         )
     relations_context = list_of_list_to_csv(relations_section_list)
@@ -1434,3 +1506,209 @@ async def naive_query(
     )
 
     return QueryResult(answer=response)
+
+
+async def mix_kg_vector_query(
+    query,
+    knowledge_graph_inst: BaseGraphStorage,
+    entities_vdb: BaseVectorStorage,
+    relationships_vdb: BaseVectorStorage,
+    chunks_vdb: BaseVectorStorage,
+    text_chunks_db: BaseKVStorage[TextChunkSchema],
+    query_param: QueryParam,
+    global_config: dict,
+    hashing_kv: BaseKVStorage = None,
+) -> str:
+    """
+    Hybrid retrieval implementation combining knowledge graph and vector search.
+
+    This function performs a hybrid search by:
+    1. Extracting semantic information from knowledge graph
+    2. Retrieving relevant text chunks through vector similarity
+    3. Combining both results for comprehensive answer generation
+    """
+    # 1. Cache handling
+    use_model_func = global_config["llm_model_func"]
+    args_hash = compute_args_hash("mix", query)
+    cached_response, quantized, min_val, max_val = await handle_cache(
+        hashing_kv, args_hash, query, "mix"
+    )
+    if cached_response is not None:
+        return cached_response
+
+    # 2. Execute knowledge graph and vector searches in parallel
+    async def get_kg_context():
+        try:
+            # Reuse keyword extraction logic from kg_query
+            example_number = global_config["addon_params"].get("example_number", None)
+            if example_number and example_number < len(
+                PROMPTS["keywords_extraction_examples"]
+            ):
+                examples = "\n".join(
+                    PROMPTS["keywords_extraction_examples"][: int(example_number)]
+                )
+            else:
+                examples = "\n".join(PROMPTS["keywords_extraction_examples"])
+
+            language = global_config["addon_params"].get(
+                "language", PROMPTS["DEFAULT_LANGUAGE"]
+            )
+
+            # Extract keywords using LLM
+            kw_prompt = PROMPTS["keywords_extraction"].format(
+                query=query, examples=examples, language=language
+            )
+            result = await use_model_func(kw_prompt, keyword_extraction=True)
+
+            match = re.search(r"\{.*\}", result, re.DOTALL)
+            if not match:
+                logger.warning(
+                    "No JSON-like structure found in keywords extraction result"
+                )
+                return None
+
+            result = match.group(0)
+            keywords_data = json.loads(result)
+            hl_keywords = keywords_data.get("high_level_keywords", [])
+            ll_keywords = keywords_data.get("low_level_keywords", [])
+
+            if not hl_keywords and not ll_keywords:
+                logger.warning("Both high-level and low-level keywords are empty")
+                return None
+
+            # Convert keyword lists to strings
+            ll_keywords_str = ", ".join(ll_keywords) if ll_keywords else ""
+            hl_keywords_str = ", ".join(hl_keywords) if hl_keywords else ""
+
+            # Set query mode based on available keywords
+            if not ll_keywords_str and not hl_keywords_str:
+                return None
+            elif not ll_keywords_str:
+                query_param.mode = "global"
+            elif not hl_keywords_str:
+                query_param.mode = "local"
+            else:
+                query_param.mode = "hybrid"
+
+            # Build knowledge graph context
+            context = await _build_query_context(
+                [ll_keywords_str, hl_keywords_str],
+                knowledge_graph_inst,
+                entities_vdb,
+                relationships_vdb,
+                text_chunks_db,
+                query_param,
+            )
+
+            return context
+
+        except Exception as e:
+            logger.error(f"Error in get_kg_context: {str(e)}")
+            return None
+
+    async def get_vector_context():
+        # Reuse vector search logic from naive_query
+        try:
+            # Reduce top_k for vector search in hybrid mode since we have structured information from KG
+            mix_topk = min(10, query_param.top_k)
+            results = await chunks_vdb.query(query, top_k=mix_topk)
+            if not results:
+                return None
+
+            chunks_ids = [r["id"] for r in results]
+            chunks = await text_chunks_db.get_by_ids(chunks_ids)
+
+            valid_chunks = []
+            for chunk, result in zip(chunks, results):
+                if chunk is not None and "content" in chunk:
+                    # Merge chunk content and time metadata
+                    chunk_with_time = {
+                        "content": chunk["content"],
+                        "created_at": result.get("created_at", None),
+                    }
+                    valid_chunks.append(chunk_with_time)
+
+            if not valid_chunks:
+                return None
+
+            maybe_trun_chunks = truncate_list_by_token_size(
+                valid_chunks,
+                key=lambda x: x["content"],
+                max_token_size=query_param.max_token_for_text_unit,
+            )
+
+            if not maybe_trun_chunks:
+                return None
+
+            # Include time information in content
+            formatted_chunks = []
+            for c in maybe_trun_chunks:
+                chunk_text = c["content"]
+                if c["created_at"]:
+                    chunk_text = f"[Created at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(c['created_at']))}]\n{chunk_text}"
+                formatted_chunks.append(chunk_text)
+
+            return "\n--New Chunk--\n".join(formatted_chunks)
+        except Exception as e:
+            logger.error(f"Error in get_vector_context: {e}")
+            return None
+
+    # 3. Execute both retrievals in parallel
+    kg_context, vector_context = await asyncio.gather(
+        get_kg_context(), get_vector_context()
+    )
+
+    # 4. Merge contexts
+    if kg_context is None and vector_context is None:
+        return PROMPTS["fail_response"]
+
+    if query_param.only_need_context:
+        return {"kg_context": kg_context, "vector_context": vector_context}
+
+    # 5. Construct hybrid prompt
+    sys_prompt = PROMPTS["mix_rag_response"].format(
+        kg_context=kg_context
+        if kg_context
+        else "No relevant knowledge graph information found",
+        vector_context=vector_context
+        if vector_context
+        else "No relevant text information found",
+        response_type=query_param.response_type,
+    )
+
+    if query_param.only_need_prompt:
+        return sys_prompt
+
+    # 6. Generate response
+    response = await use_model_func(
+        query,
+        system_prompt=sys_prompt,
+        stream=query_param.stream,
+    )
+
+    if isinstance(response, str) and len(response) > len(sys_prompt):
+        response = (
+            response.replace(sys_prompt, "")
+            .replace("user", "")
+            .replace("model", "")
+            .replace(query, "")
+            .replace("<system>", "")
+            .replace("</system>", "")
+            .strip()
+        )
+
+    # 7. Save cache
+    await save_to_cache(
+        hashing_kv,
+        CacheData(
+            args_hash=args_hash,
+            content=response,
+            prompt=query,
+            quantized=quantized,
+            min_val=min_val,
+            max_val=max_val,
+            mode="mix",
+        ),
+    )
+
+    return response

@@ -18,31 +18,13 @@ PROMPTS["DEFAULT_ENTITY_TYPES"] = {
         "package",
         "library",
         "constant",
-        "interface"
+        "interface",
     ],
-    "script": [
-        "file",
-        "script",
-        "command",
-        "configuration",
-        "dependency",
-        "service"
-    ],
-    "test": [
-        "file"
-    ],
-    "example": [
-        "file"
-    ],
-    "documentation": [
-        "file",
-        "component",
-        "service",
-        "architecture",
-        "design pattern"
-    ],
+    "script": ["file", "script", "command", "configuration", "dependency", "service"],
+    "test": ["file"],
+    "example": ["file"],
+    "documentation": ["file", "component", "service", "architecture", "design pattern"],
 }
-
 
 
 PROMPTS["entity_extraction"] = """
@@ -89,7 +71,7 @@ Your objective is to identify:
 Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
 
 3. Content-Level Keywords:
-Identify high-level keywords or topics that describe the overarching themes, concepts, or functionalities of the file. 
+Identify high-level keywords or topics that describe the overarching themes, concepts, or functionalities of the file.
 Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
 
 4. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use {record_delimiter} as the list delimiter.
@@ -240,6 +222,12 @@ The data table includes:
 If you don't know the answer, just say so. Do not make anything up.
 Do not include information where the supporting evidence for it is not provided.
 
+When handling relationships with timestamps:
+1. Each relationship has a "created_at" timestamp indicating when we acquired this knowledge
+2. When encountering conflicting relationships, consider both the semantic content and the timestamp
+3. Don't automatically prefer the most recently created relationships - use judgment based on the context
+4. For time-specific queries, prioritize temporal information in the content before considering creation timestamps
+
 ---Target response length and format---
 
 {response_type}
@@ -248,8 +236,7 @@ Do not include information where the supporting evidence for it is not provided.
 
 {context_data}
 
-Add sections and commentary to the response as appropriate for the length and format. Style the response in markdown.
-"""
+Add sections and commentary to the response as appropriate for the length and format. Style the response in markdown."""
 
 PROMPTS["keywords_extraction"] = """---Role---
 
@@ -395,6 +382,12 @@ Generate a response of the target length and format that responds to the user's 
 If you don't know the answer, just say so. Do not make anything up.
 Do not include information where the supporting evidence for it is not provided.
 
+When handling content with timestamps:
+1. Each piece of content has a "created_at" timestamp indicating when we acquired this knowledge
+2. When encountering conflicting information, consider both the content and the timestamp
+3. Don't automatically prefer the most recent content - use judgment based on the context
+4. For time-specific queries, prioritize temporal information in the content before considering creation timestamps
+
 ---Target response length and format---
 
 {response_type}
@@ -413,15 +406,20 @@ PROMPTS[
 Question 1: {original_prompt}
 Question 2: {cached_prompt}
 
-Please evaluate:
+Please evaluate the following two points and provide a similarity score between 0 and 1 directly:
 1. Whether these two questions are semantically similar
 2. Whether the answer to Question 2 can be used to answer Question 1
-
-Please provide a similarity score between 0 and 1, where:
-0: Completely unrelated or answer cannot be reused
+Similarity score criteria:
+0: Completely unrelated or answer cannot be reused, including but not limited to:
+   - The questions have different topics
+   - The locations mentioned in the questions are different
+   - The times mentioned in the questions are different
+   - The specific individuals mentioned in the questions are different
+   - The specific events mentioned in the questions are different
+   - The background information in the questions is different
+   - The key conditions in the questions are different
 1: Identical and answer can be directly reused
 0.5: Partially related and answer needs modification to be used
-
 Return only a number between 0-1, without any additional content.
 """
 
@@ -486,3 +484,37 @@ File content:
 
 Provide a summary of the file's purpose in a single paragraph.
 """
+PROMPTS["mix_rag_response"] = """---Role---
+
+You are a professional assistant responsible for answering questions based on knowledge graph and textual information. Please respond in the same language as the user's question.
+
+---Goal---
+
+Generate a concise response that summarizes relevant points from the provided information. If you don't know the answer, just say so. Do not make anything up or include information where the supporting evidence is not provided.
+
+When handling information with timestamps:
+1. Each piece of information (both relationships and content) has a "created_at" timestamp indicating when we acquired this knowledge
+2. When encountering conflicting information, consider both the content/relationship and the timestamp
+3. Don't automatically prefer the most recent information - use judgment based on the context
+4. For time-specific queries, prioritize temporal information in the content before considering creation timestamps
+
+---Data Sources---
+
+1. Knowledge Graph Data:
+{kg_context}
+
+2. Vector Data:
+{vector_context}
+
+---Response Requirements---
+
+- Target format and length: {response_type}
+- Use markdown formatting with appropriate section headings
+- Aim to keep content around 3 paragraphs for conciseness
+- Each paragraph should be under a relevant section heading
+- Each section should focus on one main point or aspect of the answer
+- Use clear and descriptive section titles that reflect the content
+- List up to 5 most important reference sources at the end under "References", clearly indicating whether each source is from Knowledge Graph (KG) or Vector Data (VD)
+  Format: [KG/VD] Source content
+
+Add sections and commentary to the response as appropriate for the length and format. If the provided information is insufficient to answer the question, clearly state that you don't know or cannot provide an answer in the same language as the user's question."""

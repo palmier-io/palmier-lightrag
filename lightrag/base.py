@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import TypedDict, Union, Literal, Generic, TypeVar, Any, Optional, Dict
+from typing import TypedDict, Union, Literal, Generic, TypeVar, Optional, Dict, Any
+from enum import Enum
 
 import numpy as np
 
@@ -15,7 +16,7 @@ T = TypeVar("T")
 
 @dataclass
 class QueryParam:
-    mode: Literal["local", "global", "hybrid", "naive"] = "global"
+    mode: Literal["local", "global", "hybrid", "naive", "mix"] = "global"
     only_need_context: bool = False
     only_need_prompt: bool = False
     response_type: str = "Multiple Paragraphs"
@@ -162,35 +163,41 @@ class BaseGraphStorage(StorageNameSpace):
     async def embed_nodes(self, algorithm: str) -> tuple[np.ndarray, list[str]]:
         raise NotImplementedError("Node embedding is not used in lightrag.")
 
-    async def get_nodes_by_property(
-        self, property_name: str, property_value: Any, split_by_sep: bool = False
-    ) -> list[dict]:
-        """Get all nodes that have a specific property value.
 
-        Args:
-            property_name: The name of the property to match
-            property_value: The value to match against
-            split_by_sep: If True, treats property value as GRAPH_FIELD_SEP-separated
-                         string and matches if value exists in any part
-        Returns:
-            List of node dictionaries matching the criteria
-        """
+class DocStatus(str, Enum):
+    """Document processing status enum"""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    PROCESSED = "processed"
+    FAILED = "failed"
+
+
+@dataclass
+class DocProcessingStatus:
+    """Document processing status data structure"""
+
+    content_summary: str  # First 100 chars of document content
+    content_length: int  # Total length of document
+    status: DocStatus  # Current processing status
+    created_at: str  # ISO format timestamp
+    updated_at: str  # ISO format timestamp
+    chunks_count: Optional[int] = None  # Number of chunks after splitting
+    error: Optional[str] = None  # Error message if failed
+    metadata: Dict[str, Any] = field(default_factory=dict)  # Additional metadata
+
+
+class DocStatusStorage(BaseKVStorage):
+    """Base class for document status storage"""
+
+    async def get_status_counts(self) -> Dict[str, int]:
+        """Get counts of documents in each status"""
         raise NotImplementedError
 
-    async def get_edges_by_property(
-        self, property_name: str, property_value: Any, split_by_sep: bool = False
-    ) -> list[dict]:
-        """Get all edges that have a specific property value.
-
-        Args:
-            property_name: The name of the property to match
-            property_value: The value to match against
-            split_by_sep: If True, treats property value as GRAPH_FIELD_SEP-separated
-                         string and matches if value exists in any part
-        Returns:
-            List of edge dictionaries matching the criteria
-        """
+    async def get_failed_docs(self) -> Dict[str, DocProcessingStatus]:
+        """Get all failed documents"""
         raise NotImplementedError
 
-    async def drop(self):
+    async def get_pending_docs(self) -> Dict[str, DocProcessingStatus]:
+        """Get all pending documents"""
         raise NotImplementedError

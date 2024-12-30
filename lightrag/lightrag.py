@@ -4,8 +4,8 @@ from tqdm.asyncio import tqdm as tqdm_async
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from functools import partial
-from typing import Type, cast, Optional
-import shutil
+from typing import Type, cast, Optional, Dict
+
 from .llm import (
     gpt_4o_mini_complete,
     openai_embedding,
@@ -16,6 +16,7 @@ from .operate import (
     delete_by_chunk_ids,
     kg_query,
     naive_query,
+    mix_kg_vector_query,
 )
 
 from .utils import (
@@ -27,16 +28,20 @@ from .utils import (
     set_logger,
 )
 from .base import (
+    BaseKVStorage,
+    BaseVectorStorage,
     BaseGraphStorage,
     StorageNameSpace,
     QueryParam,
     QueryResult,
+    DocStatus,
 )
 
 from .storage import (
     JsonKVStorage,
     NanoVectorDBStorage,
     NetworkXStorage,
+    JsonDocStatusStorage,
 )
 
 from .chunking import (
@@ -44,6 +49,7 @@ from .chunking import (
     get_language_from_file,
     traverse_directory,
     should_ignore_file,
+    EXTRACT_ENTITIES_SUPPORT_LANGUAGES,
 )
 
 from .palmier.summaries import (
@@ -58,21 +64,25 @@ from .palmier.summaries import (
 
 
 def lazy_external_import(module_name: str, class_name: str):
-    """Lazily import an external module and return a class from it."""
+    """Lazily import a class from an external module based on the package of the caller."""
 
-    def import_class(**kwargs):
+    # Get the caller's module and package
+    import inspect
+
+    caller_frame = inspect.currentframe().f_back
+    module = inspect.getmodule(caller_frame)
+    package = module.__package__ if module else None
+
+    def import_class(*args, **kwargs):
         import importlib
 
         # Import the module using importlib
-        module = importlib.import_module(module_name)
+        module = importlib.import_module(module_name, package=package)
 
-        # Get the class from the module
+        # Get the class from the module and instantiate it
         cls = getattr(module, class_name)
+        return cls(*args, **kwargs)
 
-        # Return an instance if kwargs are provided, otherwise return the class
-        return cls(**kwargs) if kwargs else cls
-
-    # Return the import_class function itself, not its result
     return import_class
 
 
@@ -96,6 +106,16 @@ QdrantStorage = lazy_external_import("lightrag.kg.qdrant_impl", "QdrantStorage")
 NeptuneCypherStorage = lazy_external_import(
     "lightrag.kg.neptune_impl", "NeptuneCypherStorage"
 )
+ChromaVectorDBStorage = lazy_external_import(
+    "lightrag.kg.chroma_impl", "ChromaVectorDBStorage"
+)
+TiDBKVStorage = lazy_external_import("lightrag.kg.tidb_impl", "TiDBKVStorage")
+TiDBVectorDBStorage = lazy_external_import(
+    "lightrag.kg.tidb_impl", "TiDBVectorDBStorage"
+)
+TiDBGraphStorage = lazy_external_import("lightrag.kg.tidb_impl", "TiDBGraphStorage")
+AGEStorage = lazy_external_import("lightrag.kg.age_impl", "AGEStorage")
+GremlinStorage = lazy_external_import("lightrag.kg.gremlin_impl", "GremlinStorage")
 
 
 def always_get_an_event_loop() -> asyncio.AbstractEventLoop:
@@ -199,6 +219,9 @@ class LightRAG:
     storage_params: dict = field(default_factory=dict)
     convert_response_to_json_func: callable = convert_response_to_json
 
+    # Add new field for document status storage type
+    doc_status_storage: str = field(default="JsonDocStatusStorage")
+
     def __post_init__(self):
         log_file = os.path.join("lightrag.log")
         set_logger(log_file)
@@ -219,27 +242,32 @@ class LightRAG:
             return partial(storage_cls, **storage_params)
 
         # Initialize all storage classes with their specific params
-        self.docs_storage_cls = get_storage_with_params(self.docs_storage)
-        self.chunks_storage_cls = get_storage_with_params(self.chunks_storage)
-        self.llm_response_cache_storage_cls = get_storage_with_params(
-            self.llm_response_cache_storage
+        self.docs_storage_cls: Type[BaseKVStorage] = get_storage_with_params(
+            self.docs_storage
         )
-        self.vector_db_storage_cls = get_storage_with_params(self.vector_storage)
-        self.graph_storage_cls = get_storage_with_params(self.graph_storage)
+        self.chunks_storage_cls: Type[BaseKVStorage] = get_storage_with_params(
+            self.chunks_storage
+        )
+        self.llm_response_cache_storage_cls: Type[BaseKVStorage] = (
+            get_storage_with_params(self.llm_response_cache_storage)
+        )
+        self.vector_db_storage_cls: Type[BaseVectorStorage] = get_storage_with_params(
+            self.vector_storage
+        )
+        self.graph_storage_cls: Type[BaseGraphStorage] = get_storage_with_params(
+            self.graph_storage
+        )
 
         if not os.path.exists(self.working_dir):
             logger.info(f"Creating working directory {self.working_dir}")
             os.makedirs(self.working_dir)
 
-        self.llm_response_cache = (
-            self.llm_response_cache_storage_cls(
-                namespace="llm_response_cache",
-                global_config=asdict(self),
-                embedding_func=None,
-            )
-            if self.enable_llm_cache
-            else None
+        self.llm_response_cache = self.llm_response_cache_storage_cls(
+            namespace="llm_response_cache",
+            global_config=asdict(self),
+            embedding_func=None,
         )
+
         self.embedding_func = limit_async_func_call(self.embedding_func_max_async)(
             self.embedding_func
         )
@@ -293,30 +321,49 @@ class LightRAG:
         self.llm_model_func = limit_async_func_call(self.llm_model_max_async)(
             partial(
                 self.llm_model_func,
-                hashing_kv=self.llm_response_cache,
+                hashing_kv=self.llm_response_cache
+                if self.llm_response_cache
+                and hasattr(self.llm_response_cache, "global_config")
+                else self.llm_response_cache_storage_cls(
+                    namespace="llm_response_cache",
+                    global_config=asdict(self),
+                    embedding_func=None,
+                ),
                 **self.llm_model_kwargs,
             )
         )
 
-    def _get_storage_class(self) -> Type[BaseGraphStorage]:
+        # Initialize document status storage
+        self.doc_status_storage_cls = self._get_storage_class()[self.doc_status_storage]
+        self.doc_status = self.doc_status_storage_cls(
+            namespace="doc_status",
+            global_config=asdict(self),
+            embedding_func=None,
+        )
+
+    def _get_storage_class(self) -> dict:
         return {
             # kv storage
             "JsonKVStorage": JsonKVStorage,
             "OracleKVStorage": OracleKVStorage,
             "MongoKVStorage": MongoKVStorage,
-            "SupabaseChunksStorage": SupabaseChunksStorage,
-            "S3DocsStorage": S3DocsStorage,
+            "TiDBKVStorage": TiDBKVStorage,
             # vector storage
             "NanoVectorDBStorage": NanoVectorDBStorage,
             "OracleVectorDBStorage": OracleVectorDBStorage,
             "QdrantStorage": QdrantStorage,
             "MilvusVectorDBStorge": MilvusVectorDBStorge,
+            "ChromaVectorDBStorage": ChromaVectorDBStorage,
+            "TiDBVectorDBStorage": TiDBVectorDBStorage,
             # graph storage
             "NetworkXStorage": NetworkXStorage,
             "Neo4JStorage": Neo4JStorage,
             "OracleGraphStorage": OracleGraphStorage,
-            "NeptuneCypherStorage": NeptuneCypherStorage,
+            "AGEStorage": AGEStorage,
+            "TiDBGraphStorage": TiDBGraphStorage,
+            "GremlinStorage": GremlinStorage,
             # "ArangoDBStorage": ArangoDBStorage
+            "JsonDocStatusStorage": JsonDocStatusStorage,
         }
 
     def insert_files(self, directory: str, file_paths: Optional[list[str]] = None):
@@ -421,10 +468,18 @@ class LightRAG:
                 await self.chunks_vdb.upsert(adding_chunks)
                 await self.text_chunks.upsert(adding_chunks)
 
-            logger.info("[Entity Extraction]...")
+            extract_entities_chunks = {
+                k: v
+                for k, v in adding_chunks.items()
+                if v["tag"]
+                and v["tag"]["language"] in EXTRACT_ENTITIES_SUPPORT_LANGUAGES
+            }
+            logger.info(
+                f"[Entity Extraction] Processing {len(extract_entities_chunks)} chunks"
+            )
             await self.chunk_entity_relation_graph.create_index()
             maybe_new_kg = await extract_entities(
-                adding_chunks,
+                extract_entities_chunks,
                 knowledge_graph_inst=self.chunk_entity_relation_graph,
                 entity_vdb=self.entities_vdb,
                 relationships_vdb=self.relationships_vdb,
@@ -515,71 +570,139 @@ class LightRAG:
         return loop.run_until_complete(self.ainsert(string_or_strings))
 
     async def ainsert(self, string_or_strings):
-        update_storage = False
-        try:
-            if isinstance(string_or_strings, str):
-                string_or_strings = [string_or_strings]
+        """Insert documents with checkpoint support
 
-            new_docs = {
-                compute_mdhash_id(c.strip(), prefix="doc-"): {"content": c.strip()}
-                for c in string_or_strings
+        Args:
+            string_or_strings: Single document string or list of document strings
+        """
+        if isinstance(string_or_strings, str):
+            string_or_strings = [string_or_strings]
+
+        # 1. Remove duplicate contents from the list
+        unique_contents = list(set(doc.strip() for doc in string_or_strings))
+
+        # 2. Generate document IDs and initial status
+        new_docs = {
+            compute_mdhash_id(content, prefix="doc-"): {
+                "content": content,
+                "content_summary": self._get_content_summary(content),
+                "content_length": len(content),
+                "status": DocStatus.PENDING,
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat(),
             }
-            _add_doc_keys = await self.full_docs.filter_keys(list(new_docs.keys()))
-            new_docs = {k: v for k, v in new_docs.items() if k in _add_doc_keys}
-            if not len(new_docs):
-                logger.warning("All docs are already in the storage")
-                return
-            update_storage = True
-            logger.info(f"[New Docs] inserting {len(new_docs)} docs")
+            for content in unique_contents
+        }
 
-            inserting_chunks = {}
-            for doc_key, doc in tqdm_async(
-                new_docs.items(), desc="Chunking documents", unit="doc"
+        # 3. Filter out already processed documents
+        _add_doc_keys = await self.doc_status.filter_keys(list(new_docs.keys()))
+        new_docs = {k: v for k, v in new_docs.items() if k in _add_doc_keys}
+
+        if not new_docs:
+            logger.info("All documents have been processed or are duplicates")
+            return
+
+        logger.info(f"Processing {len(new_docs)} new unique documents")
+
+        # Process documents in batches
+        batch_size = self.addon_params.get("insert_batch_size", 10)
+        for i in range(0, len(new_docs), batch_size):
+            batch_docs = dict(list(new_docs.items())[i : i + batch_size])
+
+            for doc_id, doc in tqdm_async(
+                batch_docs.items(), desc=f"Processing batch {i//batch_size + 1}"
             ):
-                chunks = {
-                    compute_mdhash_id(dp["content"], prefix="chunk-"): {
-                        **dp,
-                        "full_doc_id": doc_key,
+                try:
+                    # Update status to processing
+                    doc_status = {
+                        "content_summary": doc["content_summary"],
+                        "content_length": doc["content_length"],
+                        "status": DocStatus.PROCESSING,
+                        "created_at": doc["created_at"],
+                        "updated_at": datetime.now().isoformat(),
                     }
-                    for dp in chunking_by_token_size(
-                        doc["content"],
-                        overlap_token_size=self.chunk_overlap_token_size,
-                        max_token_size=self.chunk_token_size,
-                        tiktoken_model=self.tiktoken_model_name,
+                    await self.doc_status.upsert({doc_id: doc_status})
+
+                    # Generate chunks from document
+                    chunks = {
+                        compute_mdhash_id(dp["content"], prefix="chunk-"): {
+                            **dp,
+                            "full_doc_id": doc_id,
+                        }
+                        for dp in chunking_by_token_size(
+                            doc["content"],
+                            overlap_token_size=self.chunk_overlap_token_size,
+                            max_token_size=self.chunk_token_size,
+                            tiktoken_model=self.tiktoken_model_name,
+                        )
+                    }
+
+                    # Update status with chunks information
+                    doc_status.update(
+                        {
+                            "chunks_count": len(chunks),
+                            "updated_at": datetime.now().isoformat(),
+                        }
                     )
-                }
-                inserting_chunks.update(chunks)
-            _add_chunk_keys = await self.text_chunks.filter_keys(
-                list(inserting_chunks.keys())
-            )
-            inserting_chunks = {
-                k: v for k, v in inserting_chunks.items() if k in _add_chunk_keys
-            }
-            if not len(inserting_chunks):
-                logger.warning("All chunks are already in the storage")
-                return
-            logger.info(f"[New Chunks] inserting {len(inserting_chunks)} chunks")
+                    await self.doc_status.upsert({doc_id: doc_status})
 
-            await self.chunks_vdb.upsert(inserting_chunks)
+                    try:
+                        # Store chunks in vector database
+                        await self.chunks_vdb.upsert(chunks)
 
-            logger.info("[Entity Extraction]...")
-            maybe_new_kg = await extract_entities(
-                inserting_chunks,
-                knowledge_graph_inst=self.chunk_entity_relation_graph,
-                entity_vdb=self.entities_vdb,
-                relationships_vdb=self.relationships_vdb,
-                global_config=asdict(self),
-            )
-            if maybe_new_kg is None:
-                logger.warning("No new entities and relationships found")
-                return
-            self.chunk_entity_relation_graph = maybe_new_kg
+                        # Extract and store entities and relationships
+                        maybe_new_kg = await extract_entities(
+                            chunks,
+                            knowledge_graph_inst=self.chunk_entity_relation_graph,
+                            entity_vdb=self.entities_vdb,
+                            relationships_vdb=self.relationships_vdb,
+                            global_config=asdict(self),
+                        )
 
-            await self.full_docs.upsert(new_docs)
-            await self.text_chunks.upsert(inserting_chunks)
-        finally:
-            if update_storage:
-                await self._insert_done()
+                        if maybe_new_kg is None:
+                            raise Exception(
+                                "Failed to extract entities and relationships"
+                            )
+
+                        self.chunk_entity_relation_graph = maybe_new_kg
+
+                        # Store original document and chunks
+                        await self.full_docs.upsert(
+                            {doc_id: {"content": doc["content"]}}
+                        )
+                        await self.text_chunks.upsert(chunks)
+
+                        # Update status to processed
+                        doc_status.update(
+                            {
+                                "status": DocStatus.PROCESSED,
+                                "updated_at": datetime.now().isoformat(),
+                            }
+                        )
+                        await self.doc_status.upsert({doc_id: doc_status})
+
+                    except Exception as e:
+                        # Mark as failed if any step fails
+                        doc_status.update(
+                            {
+                                "status": DocStatus.FAILED,
+                                "error": str(e),
+                                "updated_at": datetime.now().isoformat(),
+                            }
+                        )
+                        await self.doc_status.upsert({doc_id: doc_status})
+                        raise e
+
+                except Exception as e:
+                    import traceback
+
+                    error_msg = f"Failed to process document {doc_id}: {str(e)}\n{traceback.format_exc()}"
+                    logger.error(error_msg)
+                    continue
+
+                finally:
+                    # Ensure all indexes are updated after each document
+                    await self._insert_done()
 
     async def _insert_done(self):
         tasks = []
@@ -751,7 +874,14 @@ class LightRAG:
                 self.full_docs,
                 param,
                 asdict(self),
-                hashing_kv=self.llm_response_cache,
+                hashing_kv=self.llm_response_cache
+                if self.llm_response_cache
+                and hasattr(self.llm_response_cache, "global_config")
+                else self.llm_response_cache_storage_cls(
+                    namespace="llm_response_cache",
+                    global_config=asdict(self),
+                    embedding_func=None,
+                ),
             )
         elif param.mode == "naive":
             response = await naive_query(
@@ -760,7 +890,33 @@ class LightRAG:
                 self.text_chunks,
                 param,
                 asdict(self),
-                hashing_kv=self.llm_response_cache,
+                hashing_kv=self.llm_response_cache
+                if self.llm_response_cache
+                and hasattr(self.llm_response_cache, "global_config")
+                else self.llm_response_cache_storage_cls(
+                    namespace="llm_response_cache",
+                    global_config=asdict(self),
+                    embedding_func=None,
+                ),
+            )
+        elif param.mode == "mix":
+            response = await mix_kg_vector_query(
+                query,
+                self.chunk_entity_relation_graph,
+                self.entities_vdb,
+                self.relationships_vdb,
+                self.chunks_vdb,
+                self.text_chunks,
+                param,
+                asdict(self),
+                hashing_kv=self.llm_response_cache
+                if self.llm_response_cache
+                and hasattr(self.llm_response_cache, "global_config")
+                else self.key_string_value_json_storage_cls(
+                    namespace="llm_response_cache",
+                    global_config=asdict(self),
+                    embedding_func=None,
+                ),
             )
         else:
             raise ValueError(f"Unknown mode {param.mode}")
@@ -821,33 +977,25 @@ class LightRAG:
             tasks.append(cast(StorageNameSpace, storage_inst).index_done_callback())
         await asyncio.gather(*tasks)
 
-    def drop(self):
-        loop = always_get_an_event_loop()
-        return loop.run_until_complete(self.adrop())
+    def _get_content_summary(self, content: str, max_length: int = 100) -> str:
+        """Get summary of document content
 
-    async def adrop(self):
-        try:
-            logger.info("Dropping Graph Storage...")
-            await self.chunk_entity_relation_graph.drop()
+        Args:
+            content: Original document content
+            max_length: Maximum length of summary
 
-            logger.info("Dropping Entities Vector Storage...")
-            await self.entities_vdb.drop()
+        Returns:
+            Truncated content with ellipsis if needed
+        """
+        content = content.strip()
+        if len(content) <= max_length:
+            return content
+        return content[:max_length] + "..."
 
-            logger.info("Dropping Relationships Vector Storage...")
-            await self.relationships_vdb.drop()
+    async def get_processing_status(self) -> Dict[str, int]:
+        """Get current document processing status counts
 
-            logger.info("Dropping Chunks Vector Storage...")
-            await self.chunks_vdb.drop()
-
-            logger.info("Dropping Text Chunks Storage...")
-            await self.text_chunks.drop()
-
-            logger.info("Dropping Full Docs Storage...")
-            await self.full_docs.drop()
-
-            if os.path.exists(self.working_dir):
-                logger.info(f"Removing working directory {self.working_dir}...")
-                shutil.rmtree(self.working_dir)
-
-        except Exception as e:
-            logger.error(f"Error while dropping storage: {e}")
+        Returns:
+            Dict with counts for each status
+        """
+        return await self.doc_status.get_status_counts()
