@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from functools import partial
 from typing import Type, cast, Optional, Dict
+import shutil
 
 from .llm import (
     gpt_4o_mini_complete,
@@ -146,6 +147,7 @@ def always_get_an_event_loop() -> asyncio.AbstractEventLoop:
 @dataclass
 class LightRAG:
     environment: str = field(default="dev")
+    repository_root: str = field(default="")
     repository_name: str = field(default="")
     repository_id: int = field(default=0)
 
@@ -345,6 +347,8 @@ class LightRAG:
         return {
             # kv storage
             "JsonKVStorage": JsonKVStorage,
+            "S3DocsStorage": S3DocsStorage,
+            "SupabaseChunksStorage": SupabaseChunksStorage,
             "OracleKVStorage": OracleKVStorage,
             "MongoKVStorage": MongoKVStorage,
             "TiDBKVStorage": TiDBKVStorage,
@@ -976,6 +980,39 @@ class LightRAG:
                 continue
             tasks.append(cast(StorageNameSpace, storage_inst).index_done_callback())
         await asyncio.gather(*tasks)
+
+    def drop(self):
+        loop = always_get_an_event_loop()
+        return loop.run_until_complete(self.adrop())
+
+    async def adrop(self):
+        try:
+            logger.info("Dropping Graph Storage...")
+            await self.chunk_entity_relation_graph.drop()
+
+            logger.info("Dropping Entities Vector Storage...")
+            await self.entities_vdb.drop()
+
+            logger.info("Dropping Relationships Vector Storage...")
+            await self.relationships_vdb.drop()
+
+            logger.info("Dropping Chunks Vector Storage...")
+            await self.chunks_vdb.drop()
+
+            logger.info("Dropping Text Chunks Storage...")
+            await self.text_chunks.drop()
+
+            logger.info("Dropping Summaries Vector Storage...")
+            await self.summaries_vdb.drop()
+
+            logger.info("Dropping Full Docs Storage...")
+            await self.full_docs.drop()
+
+            if os.path.exists(self.working_dir):
+                logger.info(f"Removing working directory {self.working_dir}...")
+                shutil.rmtree(self.working_dir)
+        except Exception as e:
+            logger.error(f"Error while dropping storage: {e}")
 
     def _get_content_summary(self, content: str, max_length: int = 100) -> str:
         """Get summary of document content

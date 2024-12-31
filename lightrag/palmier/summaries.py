@@ -309,6 +309,9 @@ def generate_directory_tree(
     ```
     """
     directory = Path(root_directory)
+    if not directory.exists():
+        logger.warning(f"Directory {root_directory} does not exist")
+        return ""
     result = []
 
     if level == 0:

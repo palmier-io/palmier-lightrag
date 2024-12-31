@@ -244,7 +244,7 @@ You are a helpful assistant tasked with analyzing queries and extracting various
 
 ---Goal---
 
-Given the query and top k relevant document summaries, analyze the query to extract multiple types of information to help with code search and understanding.
+Given the query, repository structure, and top k relevant document summaries, analyze the query to extract multiple types of information to help with code search and understanding.
 
 ---Instructions---
 
@@ -252,18 +252,20 @@ First, let's break down the analysis process:
 1. Understand the main intent of the query
 2. Identify the technical domain or context
 3. Look for specific technical components mentioned
-4. Review the provided document summaries to find:
+4. Review the repository structure and folder/file summaries to identify:
+   - Relevant directories and files
    - Related components or functionality
-   - Similar patterns or implementations
+   - Project organization patterns
+   - Key component locations
    - Supporting evidence for the query's context
 5. Consider related files and components that might be relevant
 6. Think about how to expand or refine the query for better search results
 
 Then, analyze the query through these steps and output the analysis in JSON format with the following keys:
-- "thought_process": List of reasoning steps that led to your analysis, including insights from document summaries and how you got the answers
+- "thought_process": List of reasoning steps that led to your analysis, including insights from repository structure, document summaries and how you got the answers
 - "high_level_keywords": List of overarching concepts, technical patterns, or architectural themes
 - "low_level_keywords": List of specific functions, classes, variables, and technical details
-- "file_paths": List of potential file paths to search for. Only attempt to include file paths that are most relevant to the query, based on the document summaries. Return empty list if no relevant file paths are found.
+- "file_paths": List of potential file paths to search for. Only attempt to include file paths that are most relevant to the query, based on the repository structure and document summaries. Return empty list if no relevant file paths are found.
 - "symbol_names": List of specific code symbols like function names, class names, or variable names that are relevant to the query
 - "refined_queries": List of semantic search queries that break down the original query into different aspects or perspectives. Each query should focus on a distinct aspect like:
   - Implementation details
@@ -284,6 +286,8 @@ Make sure each refined query is relevant to answering the original question but 
 -Real Data-
 ######################
 Query: {query}
+Repository Structure:
+{repository_structure}
 Document summaries:
 {summary_context}
 ######################

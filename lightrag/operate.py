@@ -31,6 +31,7 @@ from .base import (
     QueryParam,
     QueryResult,
 )
+from .palmier.summaries import generate_directory_tree
 from .llm import voyageai_rerank
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
 import time
@@ -585,6 +586,7 @@ async def kg_query(
     language = global_config["addon_params"].get(
         "language", PROMPTS["DEFAULT_LANGUAGE"]
     )
+    repo_tree = generate_directory_tree(global_config["repository_root"])
 
     # Set mode
     if query_param.mode not in ["local", "global", "hybrid"]:
@@ -602,6 +604,7 @@ async def kg_query(
         examples=examples,
         language=language,
         summary_context=summary_csv,
+        repository_structure=repo_tree,
     )
     logger.info("Analyzing query and generating search parameters")
     reasoning_result = await use_model_func(kw_prompt, keyword_extraction=True)
@@ -657,8 +660,8 @@ async def kg_query(
         relationships_vdb,
         text_chunks_db,
         full_docs,
+        summaries_vdb,
         query_param,
-        summary_csv,
         chunks_csv,
         global_config,
     )
@@ -804,6 +807,25 @@ async def _get_summaries_from_query(
     return list_of_list_to_csv(summary_context)
 
 
+async def _get_summaries_from_file_paths(
+    file_paths: list[str],
+    summaries_vdb: BaseVectorStorage,
+) -> str:
+    summary_ids = [
+        compute_mdhash_id(file_path, prefix="sum-") for file_path in file_paths
+    ]
+    summaries = await asyncio.gather(
+        *[summaries_vdb.query_by_id(summary_id) for summary_id in summary_ids]
+    )
+    logger.info(f"Retrieved {len(summaries)} relevant summaries")
+
+    summary_context = [["id", "level", "file_path", "content"]]
+    for i, s in enumerate(summaries):
+        s["id"] = i
+        summary_context.append([i, s["type"], s["file_path"], s["content"]])
+    return list_of_list_to_csv(summary_context)
+
+
 async def _get_chunks_from_keywords(
     keywords_data: dict,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
@@ -871,8 +893,8 @@ async def _build_query_context(
     relationships_vdb: BaseVectorStorage,
     text_chunks_db: BaseKVStorage[TextChunkSchema],
     full_docs: BaseKVStorage,
+    summaries_vdb: BaseVectorStorage,
     query_param: QueryParam,
-    summary_csv: str,
     chunks_csv: str,
     global_config: dict,
 ):
@@ -969,20 +991,23 @@ async def _build_query_context(
 
         # Process all reranking operations in parallel
         (
-            summary_csv,
             entities_context,
             relations_context,
             text_units_context,
         ) = await asyncio.gather(
-            _rerank_context(summary_csv, query, query_param, rerank_model),
             _rerank_context(entities_context, query, query_param, rerank_model),
             _rerank_context(relations_context, query, query_param, rerank_model),
             _rerank_context(text_units_context, query, query_param, rerank_model),
         )
+
+    text_units_context_list = csv_string_to_list(text_units_context)[1:]
+    file_paths = set([s[2] for s in text_units_context_list])
+    summaries = await _get_summaries_from_file_paths(file_paths, summaries_vdb)
+
     return f"""
 -----Summaries-----
 ```csv
-{summary_csv}
+{summaries}
 ```
 -----Entities-----
 ```csv
