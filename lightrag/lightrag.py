@@ -347,6 +347,7 @@ class LightRAG:
             # kv storage
             "JsonKVStorage": JsonKVStorage,
             "S3DocsStorage": S3DocsStorage,
+            "SupabaseChunksStorage": SupabaseChunksStorage,
             "OracleKVStorage": OracleKVStorage,
             "MongoKVStorage": MongoKVStorage,
             "TiDBKVStorage": TiDBKVStorage,
