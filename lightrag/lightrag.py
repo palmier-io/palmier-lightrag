@@ -346,6 +346,7 @@ class LightRAG:
         return {
             # kv storage
             "JsonKVStorage": JsonKVStorage,
+            "S3DocsStorage": S3DocsStorage,
             "OracleKVStorage": OracleKVStorage,
             "MongoKVStorage": MongoKVStorage,
             "TiDBKVStorage": TiDBKVStorage,
