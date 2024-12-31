@@ -146,6 +146,7 @@ def always_get_an_event_loop() -> asyncio.AbstractEventLoop:
 @dataclass
 class LightRAG:
     environment: str = field(default="dev")
+    repository_root: str = field(default="")
     repository_name: str = field(default="")
     repository_id: int = field(default=0)
 

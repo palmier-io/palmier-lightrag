@@ -31,6 +31,7 @@ from .base import (
     QueryParam,
     QueryResult,
 )
+from .palmier.summaries import generate_directory_tree
 from .llm import voyageai_rerank
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
 import time
@@ -585,6 +586,7 @@ async def kg_query(
     language = global_config["addon_params"].get(
         "language", PROMPTS["DEFAULT_LANGUAGE"]
     )
+    repo_tree = generate_directory_tree(global_config["repository_root"])
 
     # Set mode
     if query_param.mode not in ["local", "global", "hybrid"]:
@@ -602,6 +604,7 @@ async def kg_query(
         examples=examples,
         language=language,
         summary_context=summary_csv,
+        repository_structure=repo_tree,
     )
     logger.info("Analyzing query and generating search parameters")
     reasoning_result = await use_model_func(kw_prompt, keyword_extraction=True)
@@ -803,14 +806,17 @@ async def _get_summaries_from_query(
     logger.info(f"Retrieved {len(summaries)} relevant summaries")
     return list_of_list_to_csv(summary_context)
 
+
 async def _get_summaries_from_file_paths(
     file_paths: list[str],
     summaries_vdb: BaseVectorStorage,
 ) -> str:
-    summary_ids = [compute_mdhash_id(file_path, prefix="sum-") for file_path in file_paths]
-    print(file_paths)
-    print(summary_ids)
-    summaries = await asyncio.gather(*[summaries_vdb.query_by_id(summary_id) for summary_id in summary_ids])
+    summary_ids = [
+        compute_mdhash_id(file_path, prefix="sum-") for file_path in file_paths
+    ]
+    summaries = await asyncio.gather(
+        *[summaries_vdb.query_by_id(summary_id) for summary_id in summary_ids]
+    )
     logger.info(f"Retrieved {len(summaries)} relevant summaries")
 
     summary_context = [["id", "level", "file_path", "content"]]
