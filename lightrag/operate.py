@@ -821,7 +821,6 @@ async def _get_summaries_from_file_paths(
 
     summary_context = [["id", "level", "file_path", "content"]]
     for i, s in enumerate(summaries):
-        s["id"] = i
         summary_context.append([i, s["type"], s["file_path"], s["content"]])
     return list_of_list_to_csv(summary_context)
 
