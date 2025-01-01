@@ -1311,3 +1311,12 @@ primaryClass={cs.IR}
 }
 ```
 **Thank you for your interest in our work!**
+
+## Requirements
+
+### CLI Tools
+- ast-grep: Required for code structure analysis
+  ```bash
+  cargo install ast-grep
+  ```
+  For more information, visit [ast-grep documentation](https://ast-grep.github.io/)

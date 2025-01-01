@@ -1,0 +1,71 @@
+id: package
+language: go
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: package_clause
+    pattern: $CONTEXT
+---
+id: import
+language: go
+rule:
+  kind: import_spec
+  pattern: $NAME
+  inside:
+    kind: import_declaration
+    pattern: $CONTEXT
+---
+id: struct
+language: go
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: type_declaration
+    pattern: $CONTEXT
+---
+id: interface
+language: go
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: interface_type
+    pattern: $CONTEXT
+---
+id: function
+language: go
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: function_declaration
+    pattern: $CONTEXT
+---
+id: method
+language: go
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: method_declaration
+    pattern: $CONTEXT
+---
+id: variable
+language: go
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: var_declaration
+    pattern: $CONTEXT
+---
+id: const
+language: go
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: const_declaration
+    pattern: $CONTEXT 

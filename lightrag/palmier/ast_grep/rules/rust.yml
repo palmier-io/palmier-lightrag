@@ -1,0 +1,71 @@
+id: module
+language: rust
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: mod_item
+    pattern: $CONTEXT
+---
+id: use
+language: rust
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: use_declaration
+    pattern: $CONTEXT
+---
+id: struct
+language: rust
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: struct_item
+    pattern: $CONTEXT
+---
+id: enum
+language: rust
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: enum_item
+    pattern: $CONTEXT
+---
+id: impl
+language: rust
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: impl_item
+    pattern: $CONTEXT
+---
+id: function
+language: rust
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: function_item
+    pattern: $CONTEXT
+---
+id: trait
+language: rust
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: trait_item
+    pattern: $CONTEXT
+---
+id: const
+language: rust
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: const_item
+    pattern: $CONTEXT 

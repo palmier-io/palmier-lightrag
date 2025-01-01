@@ -1,0 +1,69 @@
+id: class
+language: python
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: class_definition
+    pattern: $CONTEXT
+---
+id: function
+language: python
+rule:
+  kind: identifier
+  pattern: $NAME
+  any:
+  - inside:
+      kind: function_definition
+      inside:
+        kind: decorated_definition
+        pattern: $CONTEXT
+  - inside:
+      kind: function_definition
+      pattern: $CONTEXT
+      not:
+        inside:
+          kind: decorated_definition
+---
+id: import
+language: python
+rule:
+  any:
+    - kind: dotted_name
+      pattern: $NAME
+      inside:
+        any:
+          - kind: import_statement
+            pattern: $CONTEXT
+          - kind: import_from_statement
+            pattern: $CONTEXT
+    - kind: aliased_import
+      pattern: $NAME
+      inside:
+        any:
+          - kind: import_statement
+            pattern: $CONTEXT
+          - kind: import_from_statement
+            pattern: $CONTEXT
+    - kind: relative_import
+      pattern: $NAME
+      inside:
+        any:
+          - kind: import_statement
+            pattern: $CONTEXT
+          - kind: import_from_statement
+            pattern: $CONTEXT
+    - kind: identifier
+      pattern: $NAME
+      inside:
+        kind: import_from_statement
+        pattern: $CONTEXT
+---
+id: docstring
+language: python
+rule:
+  kind: string
+  pattern: $CONTENT
+  inside:
+    kind: expression_statement
+    pattern: $CONTEXT

@@ -31,7 +31,7 @@ from .base import (
     QueryParam,
     QueryResult,
 )
-from .palmier.summaries import generate_directory_tree
+from .palmier.repo_structure import generate_directory_tree
 from .llm import voyageai_rerank
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
 import time

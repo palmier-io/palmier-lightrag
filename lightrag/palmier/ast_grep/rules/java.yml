@@ -1,0 +1,71 @@
+id: package
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: package_declaration
+    pattern: $CONTEXT
+---
+id: import
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: import_declaration
+    pattern: $CONTEXT
+---
+id: class
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: class_declaration
+    pattern: $CONTEXT
+---
+id: interface
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: interface_declaration
+    pattern: $CONTEXT
+---
+id: method
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: method_declaration
+    pattern: $CONTEXT
+---
+id: field
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: field_declaration
+    pattern: $CONTEXT
+---
+id: annotation
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: annotation
+    pattern: $CONTEXT
+---
+id: enum
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: enum_declaration
+    pattern: $CONTEXT 

@@ -1,0 +1,71 @@
+id: import
+language: typescript
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: import_statement
+    pattern: $CONTEXT
+---
+id: interface
+language: typescript
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: interface_declaration
+    pattern: $CONTEXT
+---
+id: type
+language: typescript
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: type_alias_declaration
+    pattern: $CONTEXT
+---
+id: class
+language: typescript
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: class_declaration
+    pattern: $CONTEXT
+---
+id: function
+language: typescript
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: function_declaration
+    pattern: $CONTEXT
+---
+id: method
+language: typescript
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: method_definition
+    pattern: $CONTEXT
+---
+id: decorator
+language: typescript
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: decorator
+    pattern: $CONTEXT
+---
+id: enum
+language: typescript
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: enum_declaration
+    pattern: $CONTEXT 
