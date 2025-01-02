@@ -2,13 +2,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 
-/**
- * A class that processes data
- */
-public class Example {
+// Line comment test
+public class Example {  // Class test
     private final String name;
     
+    // Enum test
+    public enum Status {
+        ACTIVE,
+        INACTIVE
+    }
+    
+    // Interface test
+    private interface Processor {
+        void process();
+    }
+    
     /**
+     * Block comment test
      * Create a new processor
      * @param name The processor name
      */
@@ -16,11 +26,7 @@ public class Example {
         this.name = name;
     }
     
-    /**
-     * Process the input data
-     * @param data Data to process
-     * @return Processed data
-     */
+    // Method test
     public Map<String, Object> processData(List<String> data) {
         Map<String, Object> result = new HashMap<>();
         for (String item : data) {
@@ -29,10 +35,6 @@ public class Example {
         return result;
     }
     
-    /**
-     * Get the processor name
-     * @return The name
-     */
     public String getName() {
         return name;
     }

@@ -1,7 +1,7 @@
 id: class
 language: cpp
 rule:
-  kind: identifier
+  kind: type_identifier
   pattern: $NAME
   inside:
     kind: class_specifier
@@ -19,11 +19,15 @@ rule:
 id: function
 language: cpp
 rule:
-  kind: identifier
+  any:
+    - kind: identifier
+    - kind: field_identifier
   pattern: $NAME
   inside:
-    kind: function_definition
-    pattern: $CONTEXT
+    kind: function_declarator
+    inside:
+      kind: function_definition
+      pattern: $CONTEXT
 ---
 id: method
 language: cpp
@@ -39,37 +43,29 @@ rule:
 id: include
 language: cpp
 rule:
-  kind: string_literal
+  kind: preproc_include
   pattern: $NAME
-  inside:
-    kind: preproc_include
-    pattern: $CONTEXT
 ---
 id: namespace
 language: cpp
 rule:
-  kind: identifier
+  kind: namespace_identifier
   pattern: $NAME
   inside:
     kind: namespace_definition
     pattern: $CONTEXT
 ---
-id: variable
+id: enum
 language: cpp
 rule:
-  kind: identifier
+  kind: type_identifier
   pattern: $NAME
   inside:
-    kind: declaration
+    kind: enum_specifier
     pattern: $CONTEXT
 ---
-id: class_variable
+id: comment
 language: cpp
 rule:
-  kind: identifier
-  pattern: $NAME
-  inside:
-    kind: field_declaration
-    pattern: $CONTEXT
-    parent:
-      kind: class_specifier 
+  kind: comment
+  pattern: $CONTENT

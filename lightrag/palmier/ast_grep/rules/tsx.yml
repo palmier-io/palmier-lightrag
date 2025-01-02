@@ -1,5 +1,5 @@
 id: import
-language: javascript
+language: tsx
 rule:
   kind: identifier
   pattern: $NAME
@@ -13,16 +13,16 @@ rule:
         pattern: $CONTEXT
 ---
 id: class
-language: javascript
+language: tsx
 rule:
-  kind: identifier
+  kind: type_identifier
   pattern: $NAME
   inside:
     kind: class_declaration
     pattern: $CONTEXT
 ---
 id: function
-language: javascript
+language: tsx
 rule:
   pattern: $NAME
   any:
@@ -61,7 +61,7 @@ rule:
         pattern: $CONTEXT
 ---
 id: export
-language: javascript
+language: tsx
 rule:
   kind: identifier
   pattern: $NAME
@@ -70,7 +70,16 @@ rule:
     pattern: $CONTEXT 
 ---
 id: comment
-language: javascript
+language: tsx
 rule:
   kind: comment
-  pattern: $CONTENT
+  pattern: $CONTENT---
+---
+id: interface
+language: tsx
+rule:
+  kind: type_identifier
+  pattern: $NAME
+  inside:
+    kind: interface_declaration
+    pattern: $CONTEXT

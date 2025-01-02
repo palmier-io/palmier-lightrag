@@ -1,16 +1,7 @@
-id: package
-language: java
-rule:
-  kind: identifier
-  pattern: $NAME
-  inside:
-    kind: package_declaration
-    pattern: $CONTEXT
----
 id: import
 language: java
 rule:
-  kind: identifier
+  kind: scoped_identifier
   pattern: $NAME
   inside:
     kind: import_declaration
@@ -40,26 +31,11 @@ rule:
   kind: identifier
   pattern: $NAME
   inside:
-    kind: method_declaration
-    pattern: $CONTEXT
----
-id: field
-language: java
-rule:
-  kind: identifier
-  pattern: $NAME
-  inside:
-    kind: field_declaration
-    pattern: $CONTEXT
----
-id: annotation
-language: java
-rule:
-  kind: identifier
-  pattern: $NAME
-  inside:
-    kind: annotation
-    pattern: $CONTEXT
+    any:
+      - kind: method_declaration
+        pattern: $CONTEXT
+      - kind: constructor_declaration
+        pattern: $CONTEXT
 ---
 id: enum
 language: java
@@ -68,4 +44,13 @@ rule:
   pattern: $NAME
   inside:
     kind: enum_declaration
-    pattern: $CONTEXT 
+    pattern: $CONTEXT
+---
+id: comment
+language: java
+rule:
+  any:
+    - kind: line_comment
+      pattern: $CONTENT
+    - kind: block_comment
+      pattern: $CONTENT

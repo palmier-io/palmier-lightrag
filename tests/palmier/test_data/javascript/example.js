@@ -1,3 +1,6 @@
+import { someFunction } from './utils';
+import DefaultClass from './default';
+
 /**
  * A class that processes data
  */
@@ -30,4 +33,7 @@ class DataProcessor {
     getName() {
         return this.name;
     }
-} 
+}
+
+export { DataProcessor };
+export default DataProcessor; 

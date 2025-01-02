@@ -4,31 +4,18 @@ rule:
   kind: identifier
   pattern: $NAME
   inside:
-    kind: import_statement
-    pattern: $CONTEXT
----
-id: interface
-language: typescript
-rule:
-  kind: identifier
-  pattern: $NAME
-  inside:
-    kind: interface_declaration
-    pattern: $CONTEXT
----
-id: type
-language: typescript
-rule:
-  kind: identifier
-  pattern: $NAME
-  inside:
-    kind: type_alias_declaration
-    pattern: $CONTEXT
+    any:
+      - kind: import_specifier
+        pattern: $CONTEXT
+      - kind: namespace_import
+        pattern: $CONTEXT
+      - kind: import_clause
+        pattern: $CONTEXT
 ---
 id: class
 language: typescript
 rule:
-  kind: identifier
+  kind: type_identifier
   pattern: $NAME
   inside:
     kind: class_declaration
@@ -37,35 +24,62 @@ rule:
 id: function
 language: typescript
 rule:
-  kind: identifier
   pattern: $NAME
-  inside:
-    kind: function_declaration
-    pattern: $CONTEXT
+  any:
+    - kind: identifier
+      inside:
+        any:
+          - kind: function_declaration
+          - kind: function_expression
+          - kind: generator_function
+          - kind: generator_function_declaration
+          - kind: method_definition
+          - kind: variable_declarator
+            inside:
+              any:
+                - kind: lexical_declaration
+                - kind: variable_declaration
+            has:
+              any:
+                - kind: arrow_function
+                - kind: function_expression
+          - kind: assignment_expression
+            has:
+              any:
+                - kind: arrow_function
+                - kind: function_expression
+        pattern: $CONTEXT
+    - kind: property_identifier
+      inside:
+        any:
+          - kind: pair
+            has:
+              any:
+                - kind: arrow_function
+                - kind: function_expression
+          - kind: method_definition
+        pattern: $CONTEXT
 ---
-id: method
+id: export
 language: typescript
 rule:
   kind: identifier
   pattern: $NAME
   inside:
-    kind: method_definition
-    pattern: $CONTEXT
----
-id: decorator
-language: typescript
-rule:
-  kind: identifier
-  pattern: $NAME
-  inside:
-    kind: decorator
-    pattern: $CONTEXT
----
-id: enum
-language: typescript
-rule:
-  kind: identifier
-  pattern: $NAME
-  inside:
-    kind: enum_declaration
+    kind: export_statement
     pattern: $CONTEXT 
+---
+id: comment
+language: typescript
+rule:
+  kind: comment
+  pattern: $CONTENT
+---
+id: interface
+language: typescript
+rule:
+  kind: type_identifier
+  pattern: $NAME
+  inside:
+    kind: interface_declaration
+    pattern: $CONTEXT

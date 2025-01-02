@@ -10,16 +10,18 @@ rule:
 id: use
 language: rust
 rule:
-  kind: identifier
-  pattern: $NAME
-  inside:
-    kind: use_declaration
-    pattern: $CONTEXT
+  any:
+    - kind: scoped_identifier
+    - kind: identifier
+      pattern: $NAME
+      inside:
+        kind: use_declaration
+        pattern: $CONTEXT
 ---
 id: struct
 language: rust
 rule:
-  kind: identifier
+  kind: type_identifier
   pattern: $NAME
   inside:
     kind: struct_item
@@ -28,7 +30,7 @@ rule:
 id: enum
 language: rust
 rule:
-  kind: identifier
+  kind: type_identifier
   pattern: $NAME
   inside:
     kind: enum_item
@@ -37,7 +39,9 @@ rule:
 id: impl
 language: rust
 rule:
-  kind: identifier
+  any:
+    - kind: type_identifier
+    - kind: generic_type
   pattern: $NAME
   inside:
     kind: impl_item
@@ -55,17 +59,32 @@ rule:
 id: trait
 language: rust
 rule:
-  kind: identifier
+  kind: type_identifier
   pattern: $NAME
   inside:
     kind: trait_item
     pattern: $CONTEXT
 ---
-id: const
+id: type
+language: rust
+rule:
+  kind: type_identifier
+  pattern: $NAME
+  inside:
+    kind: type_item
+    pattern: $CONTEXT
+---
+id: constant
 language: rust
 rule:
   kind: identifier
   pattern: $NAME
   inside:
     kind: const_item
-    pattern: $CONTEXT 
+    pattern: $CONTEXT
+---
+id: comment
+language: rust
+rule:
+  kind: line_comment
+  pattern: $CONTENT

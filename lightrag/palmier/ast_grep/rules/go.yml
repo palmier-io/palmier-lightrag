@@ -1,19 +1,19 @@
 id: package
 language: go
 rule:
-  kind: identifier
+  kind: package_identifier
   pattern: $NAME
   inside:
     kind: package_clause
     pattern: $CONTEXT
 ---
-id: import
+id: type
 language: go
 rule:
-  kind: import_spec
+  kind: type_spec
   pattern: $NAME
   inside:
-    kind: import_declaration
+    kind: type_declaration
     pattern: $CONTEXT
 ---
 id: struct
@@ -46,26 +46,14 @@ rule:
 id: method
 language: go
 rule:
-  kind: identifier
+  kind: field_identifier
   pattern: $NAME
   inside:
     kind: method_declaration
     pattern: $CONTEXT
 ---
-id: variable
+id: comment
 language: go
 rule:
-  kind: identifier
-  pattern: $NAME
-  inside:
-    kind: var_declaration
-    pattern: $CONTEXT
----
-id: const
-language: go
-rule:
-  kind: identifier
-  pattern: $NAME
-  inside:
-    kind: const_declaration
-    pattern: $CONTEXT 
+  kind: comment
+  pattern: $CONTENT

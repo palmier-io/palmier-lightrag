@@ -16,7 +16,7 @@ class DataProcessorImpl implements DataProcessor {
     constructor(name: string) {
         this.name = name;
     }
-    
+
     /**
      * Process the input data
      * @param data Data to process

@@ -94,6 +94,8 @@ def generate_skeleton(file_path: str) -> str:
         logger.warning(f"Unsupported file type: {file_path}")
         return ""
 
+    language = "javascript" if language == "jsx" else language
+
     rules_dir = Path(__file__).parent / "ast_grep" / "rules" / f"{language}.yml"
     if not rules_dir.exists():
         logger.error(f"Rules file not found: {rules_dir}")
@@ -117,7 +119,8 @@ def generate_skeleton(file_path: str) -> str:
             seen = set()
             
             for match in matches:
-                line = match.get("lines", "")
+                lines = match.get("lines", "")
+                line = lines.split("\n")[0]
                 if line in seen:
                     continue
                 seen.add(line)
