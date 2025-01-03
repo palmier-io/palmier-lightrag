@@ -2,6 +2,7 @@ accelerate
 aioboto3
 aiohttp
 anthropic
+ast-grep-py
 
 # database packages
 graspologic
@@ -20,6 +21,7 @@ pymilvus
 pymongo
 pymysql
 pyvis
+PyYAML
 qdrant-client
 # lmdeploy[all]
 sqlalchemy

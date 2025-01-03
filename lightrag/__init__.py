@@ -4,6 +4,6 @@ from .lightrag import (
     QueryResult as QueryResult,
 )
 
-__version__ = "1.0.17"
+__version__ = "1.0.18"
 __author__ = "Original: Zirui Guo, Modified: Harrison Tin"
 __url__ = "https://github.com/palmier-io/palmier-lightrag"

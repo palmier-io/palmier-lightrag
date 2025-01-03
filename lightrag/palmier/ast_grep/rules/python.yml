@@ -1,0 +1,61 @@
+id: class
+language: python
+rule:
+  kind: class_definition
+  pattern: $CLASSDEF
+---
+id: function
+language: python
+rule:
+  kind: function_definition
+  pattern: $CONTEXT
+---
+id: import
+language: python
+rule:
+  any:
+    - kind: dotted_name
+      pattern: $NAME
+      inside:
+        kind: import_from_statement
+        pattern: $CONTEXT
+    - kind: aliased_import
+      pattern: $NAME
+      inside:
+        kind: import_from_statement
+        pattern: $CONTEXT
+    - kind: relative_import
+      pattern: $NAME
+      inside:
+        kind: import_from_statement
+        pattern: $CONTEXT
+    - kind: identifier
+      pattern: $NAME
+      inside:
+        kind: import_from_statement
+        pattern: $CONTEXT
+---
+id: comment
+language: python
+rule:
+  kind: string
+  pattern: $CONTENT
+  inside:
+    kind: expression_statement
+    pattern: $CONTEXT
+---
+id: decorator
+language: python
+rule:
+  kind: decorator
+  pattern: $DECORATOR
+  inside:
+    kind: decorated_definition
+    pattern: $CONTEXT
+---
+id: enum_assignment
+language: python
+rule:
+  kind: assignment
+  inside:
+    kind: class_definition

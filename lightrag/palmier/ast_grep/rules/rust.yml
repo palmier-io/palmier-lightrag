@@ -1,0 +1,90 @@
+id: module
+language: rust
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: mod_item
+    pattern: $CONTEXT
+---
+id: use
+language: rust
+rule:
+  any:
+    - kind: scoped_identifier
+    - kind: identifier
+      pattern: $NAME
+      inside:
+        kind: use_declaration
+        pattern: $CONTEXT
+---
+id: struct
+language: rust
+rule:
+  kind: type_identifier
+  pattern: $NAME
+  inside:
+    kind: struct_item
+    pattern: $CONTEXT
+---
+id: enum
+language: rust
+rule:
+  kind: type_identifier
+  pattern: $NAME
+  inside:
+    kind: enum_item
+    pattern: $CONTEXT
+---
+id: impl
+language: rust
+rule:
+  any:
+    - kind: type_identifier
+    - kind: generic_type
+  pattern: $NAME
+  inside:
+    kind: impl_item
+    pattern: $CONTEXT
+---
+id: function
+language: rust
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: function_item
+    pattern: $CONTEXT
+---
+id: trait
+language: rust
+rule:
+  kind: type_identifier
+  pattern: $NAME
+  inside:
+    kind: trait_item
+    pattern: $CONTEXT
+---
+id: type
+language: rust
+rule:
+  kind: type_identifier
+  pattern: $NAME
+  inside:
+    kind: type_item
+    pattern: $CONTEXT
+---
+id: constant
+language: rust
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: const_item
+    pattern: $CONTEXT
+---
+id: comment
+language: rust
+rule:
+  kind: line_comment
+  pattern: $CONTENT

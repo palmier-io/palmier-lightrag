@@ -1,0 +1,56 @@
+id: import
+language: java
+rule:
+  kind: scoped_identifier
+  pattern: $NAME
+  inside:
+    kind: import_declaration
+    pattern: $CONTEXT
+---
+id: class
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: class_declaration
+    pattern: $CONTEXT
+---
+id: interface
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: interface_declaration
+    pattern: $CONTEXT
+---
+id: method
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    any:
+      - kind: method_declaration
+        pattern: $CONTEXT
+      - kind: constructor_declaration
+        pattern: $CONTEXT
+---
+id: enum
+language: java
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: enum_declaration
+    pattern: $CONTEXT
+---
+id: comment
+language: java
+rule:
+  any:
+    - kind: line_comment
+      pattern: $CONTENT
+    - kind: block_comment
+      pattern: $CONTENT

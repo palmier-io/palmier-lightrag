@@ -11,6 +11,7 @@ from ..base import BaseVectorStorage
 from ..utils import compute_mdhash_id
 from ..chunking.language_parsers import should_ignore_file
 from ..prompt import PROMPTS
+from .repo_structure import generate_directory_tree, generate_skeleton
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,9 @@ class SummaryNode:
             content = f.read(max_content_length)
         relative_path = os.path.relpath(path, root_directory)
 
+        skeleton = generate_skeleton(path)
+        # If file extension is not supported by ast-grep, fall back to using file content
+        content = skeleton if skeleton else content
         prompt = PROMPTS["file_summary"].format(
             tree=tree, path=relative_path, content=content
         )
@@ -282,67 +286,3 @@ async def update_summary(
     logger.info(f"[Update Summary] Completed in {duration:.2f} seconds")
 
     return updates
-
-
-def generate_directory_tree(
-    root_directory: str, prefix: str = "", level: int = -1
-) -> str:
-    """
-    Generate a directory tree recursively in string format
-    Filters out files/folders that should be ignored based on should_ignore_file.
-
-    Args:
-        root_directory: Root path to start tree generation
-        prefix: Prefix for the current line (used for recursion)
-        level: Maximum depth to traverse (-1 for unlimited)
-
-    Example:
-    ```
-    root
-    ├── src
-    │   ├── main.py
-    │   └── subdir
-    │       ├── module.py
-    │       └── utils.py
-    └── tests
-        └── test_main.py
-    ```
-    """
-    directory = Path(root_directory)
-    if not directory.exists():
-        logger.warning(f"Directory {root_directory} does not exist")
-        return ""
-    result = []
-
-    if level == 0:
-        return ""
-
-    try:
-        # Get all contents and filter out ignored files/folders
-        contents = []
-        for item in sorted(directory.iterdir()):
-            if should_ignore_file(str(item)):
-                continue
-            contents.append(item)
-    except PermissionError:
-        return f"{prefix}├── [Permission Denied]\n"
-
-    total = len(contents)
-
-    for index, item in enumerate(contents, start=1):
-        is_last = index == total
-        connector = "└── " if is_last else "├── "
-
-        result.append(f"{prefix}{connector}{item.name}")
-
-        # If it's a directory, recursively process its contents
-        if item.is_dir():
-            subtree = generate_directory_tree(
-                str(item),
-                prefix + ("    " if is_last else "│   "),
-                level - 1 if level != -1 else -1,
-            )
-            if subtree:
-                result.append(subtree)
-
-    return "\n".join(result)

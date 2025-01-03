@@ -1,0 +1,76 @@
+id: import
+language: javascript
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    any:
+      - kind: import_specifier
+        pattern: $CONTEXT
+      - kind: namespace_import
+        pattern: $CONTEXT
+      - kind: import_clause
+        pattern: $CONTEXT
+---
+id: class
+language: javascript
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: class_declaration
+    pattern: $CONTEXT
+---
+id: function
+language: javascript
+rule:
+  pattern: $NAME
+  any:
+    - kind: identifier
+      inside:
+        any:
+          - kind: function_declaration
+          - kind: function_expression
+          - kind: generator_function
+          - kind: generator_function_declaration
+          - kind: method_definition
+          - kind: variable_declarator
+            inside:
+              any:
+                - kind: lexical_declaration
+                - kind: variable_declaration
+            has:
+              any:
+                - kind: arrow_function
+                - kind: function_expression
+          - kind: assignment_expression
+            has:
+              any:
+                - kind: arrow_function
+                - kind: function_expression
+        pattern: $CONTEXT
+    - kind: property_identifier
+      inside:
+        any:
+          - kind: pair
+            has:
+              any:
+                - kind: arrow_function
+                - kind: function_expression
+          - kind: method_definition
+        pattern: $CONTEXT
+---
+id: export
+language: javascript
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: export_statement
+    pattern: $CONTEXT
+---
+id: comment
+language: javascript
+rule:
+  kind: comment
+  pattern: $CONTENT

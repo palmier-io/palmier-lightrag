@@ -1,0 +1,71 @@
+id: class
+language: cpp
+rule:
+  kind: type_identifier
+  pattern: $NAME
+  inside:
+    kind: class_specifier
+    pattern: $CONTEXT
+---
+id: struct
+language: cpp
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: struct_specifier
+    pattern: $CONTEXT
+---
+id: function
+language: cpp
+rule:
+  any:
+    - kind: identifier
+    - kind: field_identifier
+  pattern: $NAME
+  inside:
+    kind: function_declarator
+    inside:
+      kind: function_definition
+      pattern: $CONTEXT
+---
+id: method
+language: cpp
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    kind: function_definition
+    pattern: $CONTEXT
+    parent:
+      kind: class_specifier
+---
+id: include
+language: cpp
+rule:
+  kind: preproc_include
+  pattern: $NAME
+---
+id: namespace
+language: cpp
+rule:
+  kind: namespace_identifier
+  pattern: $NAME
+  inside:
+    kind: namespace_definition
+    pattern: $CONTEXT
+---
+id: enum
+language: cpp
+rule:
+  kind: type_identifier
+  pattern: $NAME
+  inside:
+    kind: enum_specifier
+    pattern: $CONTEXT
+---
+id: comment
+language: cpp
+rule:
+  kind: comment
+  pattern: $CONTENT
