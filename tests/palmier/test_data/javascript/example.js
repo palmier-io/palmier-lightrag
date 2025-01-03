@@ -12,7 +12,7 @@ class DataProcessor {
     constructor(name) {
         this.name = name;
     }
-    
+
     /**
      * Process the input data
      * @param {Array} data - Data to process
@@ -25,7 +25,7 @@ class DataProcessor {
         });
         return result;
     }
-    
+
     /**
      * Get the processor name
      * @returns {string} The name
@@ -36,4 +36,4 @@ class DataProcessor {
 }
 
 export { DataProcessor };
-export default DataProcessor; 
+export default DataProcessor;

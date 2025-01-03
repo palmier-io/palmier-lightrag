@@ -70,4 +70,4 @@ rule:
   pattern: $NAME
   inside:
     kind: interface_declaration
-    pattern: $CONTEXT 
+    pattern: $CONTEXT

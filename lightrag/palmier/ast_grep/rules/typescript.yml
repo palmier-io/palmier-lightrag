@@ -67,7 +67,7 @@ rule:
   pattern: $NAME
   inside:
     kind: export_statement
-    pattern: $CONTEXT 
+    pattern: $CONTEXT
 ---
 id: comment
 language: typescript

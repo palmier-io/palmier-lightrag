@@ -28,10 +28,10 @@ const DataProcessorComponent = ({ initialName }) => {
     return (
         <div className="data-processor">
             <h1>{name}</h1>
-            <input 
-                type="text" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
+            <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
             />
             <button onClick={() => setData([...data, 'new item'])}>
                 Add Item

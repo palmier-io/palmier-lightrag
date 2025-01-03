@@ -2,10 +2,10 @@ import logging
 from pathlib import Path
 import subprocess
 import json
-from typing import Dict, List
 from ..chunking.language_parsers import should_ignore_file, get_language_from_file
 
 logger = logging.getLogger(__name__)
+
 
 def generate_directory_tree(
     root_directory: str, prefix: str = "", level: int = -1
@@ -70,6 +70,7 @@ def generate_directory_tree(
 
     return "\n".join(result)
 
+
 def check_ast_grep_installed() -> bool:
     """Check if ast-grep CLI is installed."""
     try:
@@ -78,18 +79,21 @@ def check_ast_grep_installed() -> bool:
     except FileNotFoundError:
         return False
 
+
 def generate_skeleton(file_path: str) -> str:
     """
     Generate a skeleton structure of a file using ast-grep patterns.
     Returns the structural elements without implementation details.
     """
     if not check_ast_grep_installed():
-        logger.error("ast-grep CLI (sg) is not installed. Please install it with 'cargo install ast-grep'")
+        logger.error(
+            "ast-grep CLI (sg) is not installed. Please install it with 'cargo install ast-grep'"
+        )
         return ""
-    
+
     file_path = str(Path(file_path))
     language = get_language_from_file(file_path)
-    
+
     if not language:
         logger.warning(f"Unsupported file type: {file_path}")
         return ""
@@ -100,44 +104,44 @@ def generate_skeleton(file_path: str) -> str:
     if not rules_dir.exists():
         logger.error(f"Rules file not found: {rules_dir}")
         return ""
-    
+
     try:
         result = subprocess.run(
             ["sg", "scan", "--rule", str(rules_dir), "--json", file_path],
             capture_output=True,
-            text=True
+            text=True,
         )
-        
+
         if result.returncode != 0:
             logger.error(f"ast-grep failed: {result.stderr}")
             return ""
-            
+
         try:
             matches = json.loads(result.stdout)
             # Store tuples of (line_number, text)
             ordered_lines = []
             seen = set()
-            
+
             for match in matches:
                 lines = match.get("lines", "")
                 line = lines.split("\n")[0]
                 if line in seen:
                     continue
                 seen.add(line)
-                
+
                 start_line = match.get("range", {}).get("start", {}).get("line", 0)
                 ordered_lines.append((start_line, line))
-            
+
             # Sort by line number and format
             ordered_lines.sort(key=lambda x: x[0])
             result_lines = [text for _, text in ordered_lines]
-            
+
             return "\n".join(result_lines)
-            
+
         except json.JSONDecodeError:
             print(f"Failed to decode JSON: {result.stdout}")
             return ""
-        
+
     except subprocess.CalledProcessError as e:
         logger.error(f"ast-grep failed: {e}")
         return ""

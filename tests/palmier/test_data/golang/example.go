@@ -48,7 +48,7 @@ func (dp *DefaultProcessor) ProcessData(data []string) (map[string]interface{}, 
     if len(data) == 0 {
         return nil, ProcessError("empty data")
     }
-    
+
     results := make(map[string]interface{})
     dp.status = StatusSuccess
     return results, nil
@@ -115,4 +115,4 @@ type AdvancedProcessor interface {
 // Empty interface (interface{}) example
 type AnyProcessor interface {
     Process(data interface{}) interface{}
-} 
+}

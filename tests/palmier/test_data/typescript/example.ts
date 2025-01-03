@@ -28,11 +28,11 @@ class DataProcessorImpl implements DataProcessor {
             return acc;
         }, {} as Record<string, number>);
     }
-    
+
     /**
      * Get the processor name
      */
     getName(): string {
         return this.name;
     }
-} 
+}

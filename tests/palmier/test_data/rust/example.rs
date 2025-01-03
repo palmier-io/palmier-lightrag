@@ -39,7 +39,7 @@ pub struct DefaultProcessor {
 impl DefaultProcessor {
     /// Create a new DataProcessor instance
     pub fn new(name: String) -> Self {
-        DefaultProcessor { 
+        DefaultProcessor {
             name,
             status: ProcessStatus::Pending,
         }
@@ -120,4 +120,4 @@ pub const EMPTY_RESULT: Result<(), ProcessError> = Ok(());
 pub type ProcessResult<T> = Result<T, ProcessError>;
 
 // Static constant
-pub static GLOBAL_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0); 
+pub static GLOBAL_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

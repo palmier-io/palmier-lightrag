@@ -55,4 +55,4 @@ public:
     }
 };
 
-} // namespace processor 
+} // namespace processor

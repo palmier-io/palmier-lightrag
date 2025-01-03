@@ -34,10 +34,10 @@ const DataProcessorComponent: React.FC<{ initialName: string }> = ({ initialName
 
     return (
         <div className="data-processor">
-            <input 
-                type="text" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
+            <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
             />
             <button onClick={() => setData([...data, 'new item'])}>
                 Add Item
