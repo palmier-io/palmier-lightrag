@@ -405,9 +405,6 @@ class LightRAG:
                 directory, file_paths, self.summaries_vdb, self.llm_model_func
             )
 
-            logger.info("EXITING FOR TEST")
-            return
-
             # Create a new document for each file
             new_docs = {}
             for full_file_path in file_paths:

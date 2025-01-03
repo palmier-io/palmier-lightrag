@@ -48,6 +48,9 @@ class SummaryNode:
             content = f.read(max_content_length)
         relative_path = os.path.relpath(path, root_directory)
 
+        skeleton = generate_skeleton(path)
+        # If file extension is not supported by ast-grep, fall back to using file content
+        content = skeleton if skeleton else content
         prompt = PROMPTS["file_summary"].format(
             tree=tree, path=relative_path, content=content
         )
