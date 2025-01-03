@@ -1,6 +1,10 @@
 import logging
 from pathlib import Path
-from ..chunking.language_parsers import should_ignore_file, get_language_from_file
+from .language_parsers import (
+    should_ignore_file,
+    get_language_from_file,
+    AST_GREP_SUPPORT_LANGUAGES,
+)
 from .ast_grep.client import AstGrepClient
 
 logger = logging.getLogger(__name__)
@@ -75,14 +79,13 @@ def generate_skeleton(file_path: str) -> str:
     Generate a skeleton structure of a file using ast-grep.
     Returns the structural elements without implementation details.
     """
-    file_path = Path(file_path)
-    language = get_language_from_file(str(file_path))
+    language = get_language_from_file(file_path)
 
-    if not language:
-        logger.warning(f"Unsupported file type: {file_path}")
+    if not language or language not in AST_GREP_SUPPORT_LANGUAGES:
+        logger.warning(f"Unsupported file type for ast-grep, skipping: {file_path}")
         return ""
 
     language = "javascript" if language == "jsx" else language
 
     client = AstGrepClient()
-    return client.get_skeleton(str(file_path), language)
+    return client.get_skeleton(file_path, language)

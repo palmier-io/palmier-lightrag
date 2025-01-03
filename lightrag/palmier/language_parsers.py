@@ -77,6 +77,17 @@ EXTRACT_ENTITIES_SUPPORT_LANGUAGES = [
     "tsx",
 ]
 
+AST_GREP_SUPPORT_LANGUAGES = [
+    "javascript",
+    "typescript",
+    "tsx",
+    "python",
+    "cpp",
+    "go",
+    "java",
+    "rust",
+]
+
 FILES_TO_IGNORE = [
     # General lock files in JSON/YAML formats
     ".lock",
@@ -96,12 +107,13 @@ FOLDERS_TO_IGNORE = [
     ".venv",
     ".pytest_cache",
     "__pycache__",
+    ".egg-info",
 ]
 
 
 def should_ignore_file(file_path: str) -> bool:
     path = Path(file_path)
-    if any(folder in path.parts for folder in FOLDERS_TO_IGNORE):
+    if any(folder in part for part in path.parts for folder in FOLDERS_TO_IGNORE):
         return True
     if path.is_file():
         if any(path.name.endswith(ext) for ext in FILES_TO_IGNORE):

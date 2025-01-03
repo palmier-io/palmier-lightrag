@@ -45,17 +45,18 @@ from .storage import (
     JsonDocStatusStorage,
 )
 
-from .chunking import (
+from .palmier.code_chunker import (
     CodeChunker,
     get_language_from_file,
     traverse_directory,
+)
+
+from .palmier.language_parsers import (
     should_ignore_file,
     EXTRACT_ENTITIES_SUPPORT_LANGUAGES,
 )
 
-from .palmier.summaries import (
-    update_summary,
-)
+from .palmier.summaries import update_summary
 
 # future KG integrations
 
@@ -404,6 +405,9 @@ class LightRAG:
             summaries = await update_summary(
                 directory, file_paths, self.summaries_vdb, self.llm_model_func
             )
+
+            logger.info("TEST EXIT")
+            return
 
             # Create a new document for each file
             new_docs = {}

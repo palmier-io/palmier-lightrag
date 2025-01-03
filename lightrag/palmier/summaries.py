@@ -9,9 +9,11 @@ import asyncio
 
 from ..base import BaseVectorStorage
 from ..utils import compute_mdhash_id
-from ..chunking.language_parsers import should_ignore_file
+from .language_parsers import should_ignore_file
 from ..prompt import PROMPTS
 from .repo_structure import generate_directory_tree, generate_skeleton
+import re
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,8 @@ class SummaryNode:
     content: str
     file_path: str
     children: Dict[str, "SummaryNode"] = None
+    related_files: List[str] = None
+    file_type: str = None
 
     def __post_init__(self):
         if self.children is None:
@@ -51,19 +55,36 @@ class SummaryNode:
         skeleton = generate_skeleton(path)
         # If file extension is not supported by ast-grep, fall back to using file content
         content = skeleton if skeleton else content
+        file_types = "\n".join(
+            [f"{type['type']}: {type['description']}" for type in PROMPTS["FILE_TYPES"]]
+        )
         prompt = PROMPTS["file_summary"].format(
-            tree=tree, path=relative_path, content=content
+            tree=tree, path=relative_path, content=content, types=file_types
         )
+        response = await use_llm_func(prompt, max_tokens=800, keyword_extraction=True)
+        try:
+            match = re.search(r"\{.*\}", response, re.DOTALL)
+            result = match.group(0)
+            json_data = json.loads(result)
+            summary = json_data.get("summary", "")
+            related_files = json_data.get("related_files", [])
+            file_type = json_data.get("file_type", "")
 
-        summary = await use_llm_func(prompt, max_tokens=200)
-        logger.debug(f"Generated summary for {relative_path}: {summary}")
+            logger.info(
+                "\033[34m" + f"Generated summary for {relative_path}:\nFile Type: {file_type}\nRelated Files: {related_files}\nSummary: {summary}" + "\033[0m"
+            )
 
-        return SummaryNode(
-            id=compute_mdhash_id(relative_path, prefix="sum-"),
-            type=SummaryType.FILE,
-            content=summary,
-            file_path=relative_path,
-        )
+            return SummaryNode(
+                id=compute_mdhash_id(relative_path, prefix="sum-"),
+                type=SummaryType.FILE,
+                content=summary,
+                file_path=relative_path,
+                related_files=related_files,
+                file_type=file_type,
+            )
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing error: {e} {result}")
+            return None
 
     @staticmethod
     async def create_directory_node(

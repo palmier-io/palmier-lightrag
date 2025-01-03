@@ -1,5 +1,5 @@
 import pytest
-from lightrag.chunking.code_chunker import CodeChunker, CodeChunk, Position, ChunkType
+from lightrag.palmier.code_chunker import CodeChunker, CodeChunk, Position, ChunkType
 import os
 import tempfile
 

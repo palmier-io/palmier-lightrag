@@ -8,22 +8,41 @@ PROMPTS["DEFAULT_RECORD_DELIMITER"] = "##"
 PROMPTS["DEFAULT_COMPLETION_DELIMITER"] = "<|COMPLETE|>"
 PROMPTS["process_tickers"] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-PROMPTS["DEFAULT_ENTITY_TYPES"] = {
-    "core_code": [
-        "function",
-        "class",
-        "method",
-        "variable",
-        "module",
-        "package",
-        "library",
-        "constant",
-        "interface",
-    ],
+PROMPTS["FILE_TYPES"] = [
+    {
+        "type": "code",
+        "description": "A code file that contains actual code logic of the application.",
+    },
+    {
+        "type": "test",
+        "description": "A test file that contains test cases for the code.",
+    },
+    {
+        "type": "example",
+        "description": "An example file that demonstrates how to use the code.",
+    },
+    {"type": "doc", "description": "A documentation file"},
+    {
+        "type": "deployment",
+        "description": "A deployment file - could be scripts, yaml files, dockerfiles, setup files, etc.",
+    },
+    {"type": "data", "description": "A data file - could be csv, json, etc."},
+    {
+        "type": "script",
+        "description": "A script file - could be a shell script, python script, etc.",
+    },
+    {
+        "type": "other",
+        "description": "A file that doesn't fit into any of the other categories.",
+    },
+]
+
+PROMPTS["ENTITY_TYPES"] = {
+    "code": ["definition", "reference"],
     "script": ["file", "script", "command", "configuration", "dependency", "service"],
     "test": ["file"],
     "example": ["file"],
-    "documentation": ["file", "component", "service", "architecture", "design pattern"],
+    "doc": ["file", "component", "service", "architecture", "design pattern"],
 }
 
 
@@ -317,7 +336,6 @@ Output:
   "high_level_keywords": ["Authentication", "Login process", "Security"],
   "low_level_keywords": ["User credentials", "Token generation", "Password verification", "Session management"],
   "file_paths": ["auth/service.py", "models/user.py"],
-  "symbol_names": ["AuthService", "authenticate", "login", "verify_password", "TokenGenerator", "User"],
   "refined_queries": [
     "What is the implementation flow of AuthService authentication method",
     "How are user credentials validated and verified in the login process",
@@ -328,50 +346,7 @@ Output:
     "What configuration options are available for AuthService"
   ]
 }
-#############################""",
-    """Example 2:
-
-Query: "How many model providers are supported?"
-################
-Output:
-{
-  "thought_process": [
-    "1. Query asks about supported model providers in the framework",
-    "2. Need to analyze summaries to identify different model integrations",
-    "3. Found multiple providers mentioned across different files",
-    "4. Examples directory shows various implementations",
-    "5. Looking at llm.py and example files for supported integrations",
-    "6. Document summaries reveal integration with multiple cloud and open-source providers"
-  ],
-  "high_level_keywords": ["Model providers", "Language models", "API integration", "Model deployment"],
-  "low_level_keywords": [
-    "OpenAI compatible",
-    "Ollama",
-    "LMDeploy",
-    "Azure OpenAI",
-    "Amazon Bedrock",
-  ],
-  "file_paths": [
-    "lightrag/llm.py",
-  ],
-  "symbol_names": [
-    "openai_complete_if_cache",
-    "ollama_model_complete",
-    "lmdeploy_model_complete",
-    "embedding_func",
-    "llm_model_func"
-  ],
-  "refined_queries": [
-    "What are the built-in model provider integrations available",
-    "How to configure different model providers in the system",
-    "What are the requirements for each supported model provider",
-    "How to implement custom model provider integrations",
-    "What are the differences between supported provider implementations",
-    "How is model provider authentication handled",
-    "What are the limitations or constraints for each provider"
-  ]
-}
-#############################""",
+#############################"""
 ]
 
 
@@ -489,9 +464,49 @@ Your task:
 - Mention any key classes, functions, or dependencies.
 - Explain how this file fits into the broader codebase or repository.
 - Always start the summary with the file path.
+- Categorize the file into one of the following types:
+{types}
+- List all the related files
+  - If the file is a code file, list all the files that are imported by the file.
+  - If the file is a test file, list the files that are being tested.
+  - If the file is a doc file, list the files that are relevant to the doc.
+  - If the file is an example file, list the files that are being used as an example.
+  - Only include internal files, not external libraries. If the files are not found in the repository structure, that means it does not exist.
+  - Return an empty list if there are no related files for the above cases, or if the file is other file types.
+- Output the summary, file type, and list of related files in JSON format.
 
-Below is an example of the style and level of detail you should aim for:
-The `lightrag/operate.py` file serves as a core orchestrator for reading and processing text content, extracting entities and relationships, and managing knowledge graph operations like node/edge merging. It leverages utility functions from `utils.py` (for encoding/decoding text, hashing arguments, handling caches) and base storage classes from `base.py` (for graph and vector-related queries). This module also integrates an LLM-based ranking (`voyageai_rerank` in `llm.py`) and uses async functionality to handle large or concurrent tasks. By coordinating chunking, deletion, query building, and the retrieval of top-k summaries from vector storage, `operate.py` supports efficient context generation and knowledge graph maintenance across the larger Lightrag codebase.
+Example:
+Repository Structure:
+├── lightrag
+│   ├── base.py
+│   ├── lightrag.py
+│   ├── llm.py
+│   ├── operate.py
+│   ├── prompt.py
+│   ├── storage.py
+│   └── utils.py
+|__ README.md
+
+File Path:
+lightrag/operate.py
+
+File Content:
+from .llm import ...
+from .utils import ...
+from .base import ...
+def func_1():
+    ...
+def func_2():
+    ...
+def func_3():
+    ...
+
+Output:
+{{
+  "summary": "The `lightrag/operate.py` file serves as a core orchestrator for reading and processing text content, extracting entities and relationships, and managing knowledge graph operations like node/edge merging. It leverages utility functions from `utils.py` (for encoding/decoding text, hashing arguments, handling caches) and base storage classes from `base.py` (for graph and vector-related queries). This module also integrates an LLM-based ranking (`voyageai_rerank` in `llm.py`) and uses async functionality to handle large or concurrent tasks. By coordinating chunking, deletion, query building, and the retrieval of top-k summaries from vector storage, `operate.py` supports efficient context generation and knowledge graph maintenance across the larger Lightrag codebase.",
+  "file_type": "code",
+  "related_files": ["lightrag/utils.py", "lightrag/base.py", "lightrag/llm.py"]
+}}
 """
 
 PROMPTS["mix_rag_response"] = """---Role---

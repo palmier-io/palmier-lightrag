@@ -1,5 +1,5 @@
 import pytest
-from lightrag.chunking.code_chunker import CodeChunker
+from lightrag.palmier.code_chunker import CodeChunker
 import os
 import tempfile
 

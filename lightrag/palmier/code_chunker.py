@@ -6,12 +6,23 @@ import logging
 from typing import Dict, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass
-from lightrag.chunking.language_parsers import (
+from lightrag.palmier.language_parsers import (
     get_language_from_file,
     CHUNKING_SUPPORT_LANGUAGES,
     FILES_TO_IGNORE,
 )
 
+"""
+## Chunking Strategy
+1. Given a code file, parse the AST tree
+2. Starting from the root node, recursively traverse the tree
+3. If the sum token of the current node and next node is within the token size limit, we append the nodes together in the same chunk
+4. Repeat until either:
+    a. Current chunk + next node exceeds the token limit, in which case we start a new chunk
+    b. Next node itself exceeds the token limit, in which case we recursively walk the next node's children and start a new chunk
+5. Once the tree is parsed into a list of chunks, we walk through the list and merge small chunks (starting backward because small chunks like funciton signature and comments should be in the beginning of the chunk)
+6. If the leaf node is still too big, it will be chunked by the default token size limit.
+"""
 
 class ChunkType(Enum):
     TREE_SITTER = "tree_sitter"
