@@ -470,24 +470,27 @@ Provide a cohesive summary of the directory's purpose in a single paragraph.
 """
 
 PROMPTS["file_summary"] = """
-You are summarizing code structure, given the code content, file path, and the codebase structure.
-Summarize its purpose and content concisely and capture the important classes/functions/dependencies of the file.
-Try your best to explain the file's purppose and role in the codebase.
+You are a helpful assistant that summarizes a code file based on the following:
 
-Example:
-The lightrag/llm.py file defines a QdrantStorage class, which is a vector storage implementation for the Qdrant vector database with multi-tenancy support. This dataclass extends BaseVectorStorage and provides comprehensive methods for interacting with Qdrant, including upsert (inserting or updating vectors), query, query_by_id, and delete operations. Key features include repository-specific filtering, deterministic ID generation, batch processing for embeddings, and robust error handling. The implementation supports vector storage with cosine similarity, handles environment-specific collection naming, and ensures data isolation across different repositories through a repository_id mechanism.
-
-Codebase structure:
+Repository Structure:
 {tree}
 
-File path:
+File Path:
 {path}
 
-File content:
+Skeleton File Content:
 {content}
 
-Provide a summary of the file's purpose in a single paragraph.
+Your task:
+- Provide a concise, single-paragraph summary of the file purpose and functionality.
+- Mention any key classes, functions, or dependencies.
+- Explain how this file fits into the broader codebase or repository.
+- Always start the summary with the file path.
+
+Below is an example of the style and level of detail you should aim for:
+The `lightrag/operate.py` file serves as a core orchestrator for reading and processing text content, extracting entities and relationships, and managing knowledge graph operations like node/edge merging. It leverages utility functions from `utils.py` (for encoding/decoding text, hashing arguments, handling caches) and base storage classes from `base.py` (for graph and vector-related queries). This module also integrates an LLM-based ranking (`voyageai_rerank` in `llm.py`) and uses async functionality to handle large or concurrent tasks. By coordinating chunking, deletion, query building, and the retrieval of top-k summaries from vector storage, `operate.py` supports efficient context generation and knowledge graph maintenance across the larger Lightrag codebase.
 """
+
 PROMPTS["mix_rag_response"] = """---Role---
 
 You are a professional assistant responsible for answering questions based on knowledge graph and textual information. Please respond in the same language as the user's question.

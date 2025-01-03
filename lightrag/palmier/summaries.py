@@ -11,7 +11,7 @@ from ..base import BaseVectorStorage
 from ..utils import compute_mdhash_id
 from ..chunking.language_parsers import should_ignore_file
 from ..prompt import PROMPTS
-from .repo_structure import generate_directory_tree
+from .repo_structure import generate_directory_tree, generate_skeleton
 
 logger = logging.getLogger(__name__)
 
