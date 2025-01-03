@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import logging
 import yaml
 
@@ -34,14 +34,18 @@ class AstGrepClient:
         try:
             with open(rules_file) as f:
                 documents = yaml.safe_load_all(f)
-                return [{"rule": doc["rule"]} for doc in documents if "rule" in doc]
+                return [
+                    {"id": doc["id"], "rule": doc["rule"]}
+                    for doc in documents
+                    if "rule" in doc
+                ]
         except Exception as e:
             logger.error(f"Error loading rules from {rules_file}: {e}")
             return []
 
     def scan(
         self, file_path: str, language: str, content: Optional[str] = None
-    ) -> List[SgNode]:
+    ) -> List[Tuple[str, SgNode]]:
         """
         Scan a file using ast-grep rules. Equivalent to `sg scan --rule <rule>.yml <file_path>`.
 
@@ -50,7 +54,7 @@ class AstGrepClient:
             language: Programming language of the file
             content: Optional - if not provided, the file at `file_path` will be read
         Returns:
-            List of SgNode objects
+            List of Tuple [rule_id, SgNode] objects
         """
         try:
             rules = self.load_rules(language)
@@ -64,13 +68,17 @@ class AstGrepClient:
             node = root.root()
 
             results = []
-            for rule in rules:
-                matches = node.find_all(rule)
-                results.extend(matches)
+            for r in rules:
+                matches = node.find_all(r)
+                results.extend([(r["id"], match) for match in matches])
             return results
 
         except Exception as e:
-            logger.error(f"Error scanning file {file_path}: {e}")
+            import traceback
+
+            logger.error(
+                f"Error scanning file {file_path}: {e}\n{traceback.format_exc()}"
+            )
             return []
 
     def get_skeleton(self, file_path: str, language: str) -> str:
@@ -90,11 +98,20 @@ class AstGrepClient:
         ordered_lines = []
         seen = set()
         for result in results:
-            line_number = result.range().start.line
-            if line_number in seen:
+            rule_id, node = result
+            start_line = node.range().start.line
+            if start_line in seen:
                 continue
-            seen.add(line_number)
-            ordered_lines.append(
-                (line_number, content_lines[line_number])
-            )  # Only include the first line of each match
+            seen.add(start_line)
+
+            if rule_id == "comment":
+                # Capture multiline comments
+                end_line = node.range().end.line
+                line = "\n".join(content_lines[start_line:end_line])
+            else:
+                # Capture single line signatures
+                line = content_lines[start_line]
+
+            ordered_lines.append((start_line, line))
+        ordered_lines.sort(key=lambda x: x[0])
         return "\n".join(text for _, text in ordered_lines)
