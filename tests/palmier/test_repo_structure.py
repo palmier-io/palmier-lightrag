@@ -3,7 +3,6 @@ from pathlib import Path
 from lightrag.palmier.repo_structure import (
     generate_directory_tree,
     generate_skeleton,
-    check_ast_grep_installed,
 )
 
 # Setup test data directory
@@ -26,8 +25,6 @@ def test_directory_tree():
 
 def test_python_skeleton():
     """Test Python file skeleton generation"""
-    if not check_ast_grep_installed():
-        pytest.skip("ast-grep not installed")
 
     python_file = TEST_DATA_DIR / "python" / "example.py"
     skeleton = generate_skeleton(str(python_file))
@@ -41,8 +38,6 @@ def test_python_skeleton():
 
 def test_javascript_skeleton():
     """Test JavaScript file skeleton generation"""
-    if not check_ast_grep_installed():
-        pytest.skip("ast-grep not installed")
 
     js_file = TEST_DATA_DIR / "javascript" / "example.js"
     skeleton = generate_skeleton(str(js_file))
@@ -63,8 +58,6 @@ def test_javascript_skeleton():
 
 def test_typescript_skeleton():
     """Test TypeScript file skeleton generation"""
-    if not check_ast_grep_installed():
-        pytest.skip("ast-grep not installed")
 
     ts_file = TEST_DATA_DIR / "typescript" / "example.ts"
     skeleton = generate_skeleton(str(ts_file))
@@ -91,8 +84,6 @@ def test_typescript_skeleton():
 
 def test_java_skeleton():
     """Test Java file skeleton generation"""
-    if not check_ast_grep_installed():
-        pytest.skip("ast-grep not installed")
 
     java_file = TEST_DATA_DIR / "java" / "Example.java"
     skeleton = generate_skeleton(str(java_file))
@@ -105,8 +96,6 @@ def test_java_skeleton():
 
 def test_cpp_skeleton():
     """Test C++ file skeleton generation"""
-    if not check_ast_grep_installed():
-        pytest.skip("ast-grep not installed")
 
     cpp_file = TEST_DATA_DIR / "cpp" / "example.cpp"
     skeleton = generate_skeleton(str(cpp_file))
@@ -125,8 +114,6 @@ def test_cpp_skeleton():
 
 def test_golang_skeleton():
     """Test Go file skeleton generation"""
-    if not check_ast_grep_installed():
-        pytest.skip("ast-grep not installed")
 
     go_file = TEST_DATA_DIR / "golang" / "example.go"
     skeleton = generate_skeleton(str(go_file))
@@ -148,8 +135,6 @@ def test_golang_skeleton():
 
 def test_rust_skeleton():
     """Test Rust file skeleton generation"""
-    if not check_ast_grep_installed():
-        pytest.skip("ast-grep not installed")
 
     rust_file = TEST_DATA_DIR / "rust" / "example.rs"
     skeleton = generate_skeleton(str(rust_file))
@@ -168,3 +153,14 @@ def test_rust_skeleton():
     assert "impl<T> GenericProcessor<T> {" in skeleton
     assert "pub fn combine(first: String, second: String) -> String {" in skeleton
     assert "pub const MAX_RETRIES: u32 = 3;" in skeleton
+
+
+def test_non_code_files_skeleton():
+    """Test that non-code files (JSON, MD) return empty strings"""
+
+    json_file = TEST_DATA_DIR / "other" / "example.json"
+    md_file = TEST_DATA_DIR / "other" / "example.md"
+
+    # Verify both file types return empty strings
+    assert generate_skeleton(str(json_file)) == ""
+    assert generate_skeleton(str(md_file)) == ""

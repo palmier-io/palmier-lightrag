@@ -1,0 +1,10 @@
+{
+    "name": "example",
+    "version": "1.0.0",
+    "description": "Test JSON file",
+    "author": "Test User",
+    "nested": {
+        "key": "value",
+        "array": [1, 2, 3]
+    }
+}

@@ -35,7 +35,7 @@ rule:
         kind: import_from_statement
         pattern: $CONTEXT
 ---
-id: docstring
+id: comment
 language: python
 rule:
   kind: string
