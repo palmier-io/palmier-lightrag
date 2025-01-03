@@ -2,6 +2,7 @@ accelerate
 aioboto3
 aiohttp
 anthropic
+ast-grep-py
 
 # database packages
 graspologic
@@ -20,6 +21,7 @@ pymilvus
 pymongo
 pymysql
 pyvis
+PyYAML
 qdrant-client
 # lmdeploy[all]
 sqlalchemy
@@ -35,5 +37,3 @@ tree-sitter==0.21.3
 tree_sitter_languages==1.10.2
 voyageai
 xxhash
-ast-grep-py
-PyYAML

@@ -7,4 +7,4 @@ This is a test markdown file with various elements:
 - List item 2
 
 ## Section 2
-Some regular text with **bold** and *italic* formatting. 
+Some regular text with **bold** and *italic* formatting.

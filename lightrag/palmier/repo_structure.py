@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-import subprocess
 from ..chunking.language_parsers import should_ignore_file, get_language_from_file
 from .ast_grep.client import AstGrepClient
 
@@ -70,6 +69,7 @@ def generate_directory_tree(
 
     return "\n".join(result)
 
+
 def generate_skeleton(file_path: str) -> str:
     """
     Generate a skeleton structure of a file using ast-grep.
@@ -83,6 +83,6 @@ def generate_skeleton(file_path: str) -> str:
         return ""
 
     language = "javascript" if language == "jsx" else language
-    
+
     client = AstGrepClient()
     return client.get_skeleton(str(file_path), language)
