@@ -276,13 +276,8 @@ async def extract_entities(
 
     ordered_chunks = list(c for c in chunks.items())
     logger.debug(f"Extracting entities from {len(ordered_chunks)} chunks")
-    # add language and example number params to prompt
-    language = global_config["addon_params"].get(
-        "language", PROMPTS["DEFAULT_LANGUAGE"]
-    )
-    entity_types = global_config["addon_params"].get(
-        "entity_types", PROMPTS["DEFAULT_ENTITY_TYPES"]
-    )
+
+
     example_number = global_config["addon_params"].get("example_number", None)
     if example_number and example_number < len(PROMPTS["entity_extraction_examples"]):
         examples = "\n".join(
@@ -295,10 +290,6 @@ async def extract_entities(
         tuple_delimiter=PROMPTS["DEFAULT_TUPLE_DELIMITER"],
         record_delimiter=PROMPTS["DEFAULT_RECORD_DELIMITER"],
         completion_delimiter=PROMPTS["DEFAULT_COMPLETION_DELIMITER"],
-        entity_types=",".join(
-            [f"{k}:{v}" for k, v in PROMPTS["DEFAULT_ENTITY_TYPES"].items()]
-        ),
-        language=language,
     )
     # add example's format
     examples = examples.format(**example_context_base)
@@ -308,9 +299,8 @@ async def extract_entities(
         tuple_delimiter=PROMPTS["DEFAULT_TUPLE_DELIMITER"],
         record_delimiter=PROMPTS["DEFAULT_RECORD_DELIMITER"],
         completion_delimiter=PROMPTS["DEFAULT_COMPLETION_DELIMITER"],
-        entity_types=",".join(entity_types),
         examples=examples,
-        language=language,
+        language="English",
     )
 
     continue_prompt = PROMPTS["entiti_continue_extraction"]
@@ -326,15 +316,18 @@ async def extract_entities(
         chunk_dp = chunk_key_dp[1]
         content = chunk_dp["content"]
         summary_id = chunk_dp["full_doc_id"].replace("doc-", "sum-")
-        file_summary = (
-            summaries[summary_id]["content"]
-            if summaries and summary_id in summaries
-            else ""
-        )
+        file_summary, file_type = (
+            summaries[summary_id]["content"],
+            summaries[summary_id]["metadata"]["file_type"],
+        ) if summaries and summary_id in summaries else ("", "")
+
+        entity_types = PROMPTS["FILE_TYPES"][file_type]["entity_types"]
+        if not entity_types:
+            return None
         # hint_prompt = entity_extract_prompt.format(**context_base, input_text=content)
         hint_prompt = entity_extract_prompt.format(
-            **context_base, input_text="{input_text}", file_summary="{file_summary}"
-        ).format(**context_base, input_text=content, file_summary=file_summary)
+            **context_base, input_text="{input_text}", file_summary="{file_summary}", entity_types="{entity_types}"
+        ).format(**context_base, input_text=content, file_summary=file_summary, entity_types=entity_types)
 
         final_result = await use_llm_func(hint_prompt)
         history = pack_user_ass_to_openai_messages(hint_prompt, final_result)
@@ -1126,44 +1119,16 @@ async def _find_most_related_text_unit_from_entities(
         split_string_by_multi_markers(dp["source_id"], [GRAPH_FIELD_SEP])
         for dp in node_datas
     ]
-    edges = await asyncio.gather(
-        *[knowledge_graph_inst.get_node_edges(dp["entity_name"]) for dp in node_datas]
-    )
-    all_one_hop_nodes = set()
-    for this_edges in edges:
-        if not this_edges:
-            continue
-        all_one_hop_nodes.update([e[1] for e in this_edges])
-
-    all_one_hop_nodes = list(all_one_hop_nodes)
-    all_one_hop_nodes_data = await asyncio.gather(
-        *[knowledge_graph_inst.get_node(e) for e in all_one_hop_nodes]
-    )
-
-    # Add null check for node data
-    all_one_hop_text_units_lookup = {
-        k: set(split_string_by_multi_markers(v["source_id"], [GRAPH_FIELD_SEP]))
-        for k, v in zip(all_one_hop_nodes, all_one_hop_nodes_data)
-        if v is not None and "source_id" in v  # Add source_id check
-    }
 
     all_text_units_lookup = {}
-    for index, (this_text_units, this_edges) in enumerate(zip(text_units, edges)):
+    for index, this_text_units in enumerate(text_units):
         for c_id in this_text_units:
             if c_id not in all_text_units_lookup:
                 all_text_units_lookup[c_id] = {
                     "data": await text_chunks_db.get_by_id(c_id),
                     "order": index,
-                    "relation_counts": 0,
+                    "relation_counts": 0,  # Keep this but it won't be updated
                 }
-
-            if this_edges:
-                for e in this_edges:
-                    if (
-                        e[1] in all_one_hop_text_units_lookup
-                        and c_id in all_one_hop_text_units_lookup[e[1]]
-                    ):
-                        all_text_units_lookup[c_id]["relation_counts"] += 1
 
     # Filter out None values and ensure data has content
     all_text_units = [
@@ -1176,9 +1141,8 @@ async def _find_most_related_text_unit_from_entities(
         logger.warning("No valid text units found")
         return []
 
-    all_text_units = sorted(
-        all_text_units, key=lambda x: (x["order"], -x["relation_counts"])
-    )
+    # Now only sorting by order since relation_counts will always be 0
+    all_text_units = sorted(all_text_units, key=lambda x: x["order"])
 
     all_text_units = truncate_list_by_token_size(
         all_text_units,

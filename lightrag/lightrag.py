@@ -45,17 +45,18 @@ from .storage import (
     JsonDocStatusStorage,
 )
 
-from .chunking import (
+from .palmier.code_chunker import (
     CodeChunker,
     get_language_from_file,
     traverse_directory,
+)
+
+from .palmier.language_parsers import (
     should_ignore_file,
     EXTRACT_ENTITIES_SUPPORT_LANGUAGES,
 )
 
-from .palmier.summaries import (
-    update_summary,
-)
+from .palmier.summaries import update_summary
 
 # future KG integrations
 
@@ -416,10 +417,13 @@ class LightRAG:
                 language = get_language_from_file(full_file_path)
                 # use hash(file_path) as doc_id
                 doc_id = compute_mdhash_id(relative_file_path, prefix="doc-")
+                sum_id = doc_id.replace("doc-", "sum-")
+                file_type = summaries[sum_id]["metadata"]["file_type"]
                 new_docs[doc_id] = {
                     "file_path": relative_file_path,
                     "language": language,
                     "content": content,
+                    "file_type": file_type,
                 }
 
             update_storage = True
@@ -436,6 +440,7 @@ class LightRAG:
                     compute_mdhash_id(dp["content"], prefix="chunk-"): {
                         **dp,
                         "full_doc_id": doc_key,
+                        "file_type": doc["file_type"],
                     }
                     for dp in code_chunker.chunk_file(doc["file_path"], doc["content"])
                 }
@@ -477,6 +482,7 @@ class LightRAG:
                 for k, v in adding_chunks.items()
                 if v["tag"]
                 and v["tag"]["language"] in EXTRACT_ENTITIES_SUPPORT_LANGUAGES
+                and v["file_type"] in ["code", "doc"]
             }
             logger.info(
                 f"[Entity Extraction] Processing {len(extract_entities_chunks)} chunks"
