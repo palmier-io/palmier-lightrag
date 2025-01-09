@@ -82,10 +82,39 @@ def generate_skeleton(file_path: str) -> str:
     language = get_language_from_file(file_path)
 
     if not language or language not in AST_GREP_SUPPORT_LANGUAGES:
-        logger.warning(f"Unsupported file type for ast-grep, skipping: {file_path}")
+        logger.debug(f"Unsupported file type for ast-grep, skipping: {file_path}")
         return ""
 
     language = "javascript" if language == "jsx" else language
 
     client = AstGrepClient()
-    return client.get_skeleton(file_path, language)
+
+    content = Path(file_path).read_text()
+    content_lines = content.splitlines()
+
+    # Load rules from yaml files
+    rules = client.load_rules(language)
+    if not rules:
+        return []
+
+    results = client.scan(file_path, language, rules, content)
+    ordered_lines = []
+    seen = set()
+    for result in results:
+        rule_id, node = result
+        start_line = node.range().start.line
+        if start_line in seen:
+            continue
+        seen.add(start_line)
+
+        if rule_id == "comment":
+            # Capture multiline comments
+            end_line = node.range().end.line
+            line = "\n".join(content_lines[start_line:end_line])
+        else:
+            # Capture single line signatures
+            line = content_lines[start_line]
+
+        ordered_lines.append((start_line, line))
+    ordered_lines.sort(key=lambda x: x[0])
+    return "\n".join(text for _, text in ordered_lines)

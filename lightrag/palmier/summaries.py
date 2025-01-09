@@ -31,8 +31,7 @@ class SummaryNode:
     content: str
     file_path: str
     children: Dict[str, "SummaryNode"] = None
-    related_files: List[str] = None
-    file_type: str = None
+    metadata: Dict[str, Dict] = None
 
     def __post_init__(self):
         if self.children is None:
@@ -56,7 +55,7 @@ class SummaryNode:
         # If file extension is not supported by ast-grep, fall back to using file content
         content = skeleton if skeleton else content
         file_types = "\n".join(
-            [f"{type['type']}: {type['description']}" for type in PROMPTS["FILE_TYPES"]]
+            [f"{k}: {v['description']}" for k, v in PROMPTS["FILE_TYPES"].items()]
         )
         prompt = PROMPTS["file_summary"].format(
             tree=tree, path=relative_path, content=content, types=file_types
@@ -64,23 +63,33 @@ class SummaryNode:
         response = await use_llm_func(prompt, max_tokens=800, keyword_extraction=True)
         try:
             match = re.search(r"\{.*\}", response, re.DOTALL)
+            if not match:
+                print(f"No json found in response: {response}")
+                return None
             result = match.group(0)
             json_data = json.loads(result)
             summary = json_data.get("summary", "")
             related_files = json_data.get("related_files", [])
+            related_files = [
+                file for file in related_files if os.path.exists(file)
+            ]
             file_type = json_data.get("file_type", "")
 
-            logger.info(
-                "\033[34m" + f"Generated summary for {relative_path}:\nFile Type: {file_type}\nRelated Files: {related_files}\nSummary: {summary}" + "\033[0m"
+            logger.debug(
+                f"Generated summary for {relative_path}:\nFile Type: {file_type}\nRelated Files: {related_files}\nSummary: {summary}"
             )
+
+            metadata = {
+                "file_type": file_type,
+                "related_files": related_files,
+            }
 
             return SummaryNode(
                 id=compute_mdhash_id(relative_path, prefix="sum-"),
                 type=SummaryType.FILE,
                 content=summary,
                 file_path=relative_path,
-                related_files=related_files,
-                file_type=file_type,
+                metadata=metadata,
             )
         except json.JSONDecodeError as e:
             print(f"JSON parsing error: {e} {result}")
@@ -161,6 +170,7 @@ class SummaryNode:
             "content": self.content,
             "file_path": self.file_path,
             "type": self.type.value,
+            "metadata": self.metadata,
         }
 
     @classmethod

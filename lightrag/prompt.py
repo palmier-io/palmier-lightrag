@@ -8,42 +8,48 @@ PROMPTS["DEFAULT_RECORD_DELIMITER"] = "##"
 PROMPTS["DEFAULT_COMPLETION_DELIMITER"] = "<|COMPLETE|>"
 PROMPTS["process_tickers"] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-PROMPTS["FILE_TYPES"] = [
-    {
-        "type": "code",
+PROMPTS["FILE_TYPES"] = {
+    "code": {
         "description": "A code file that contains actual code logic of the application.",
+        "entity_types": ["definition", "reference"],
     },
-    {
-        "type": "test",
+    "test": {
         "description": "A test file that contains test cases for the code.",
+        "entity_types": [],
     },
-    {
-        "type": "example",
+    "example": {
         "description": "An example file that demonstrates how to use the code.",
+        "entity_types": [],
     },
-    {"type": "doc", "description": "A documentation file"},
-    {
-        "type": "deployment",
+    "doc": {
+        "description": "A documentation file",
+        "entity_types": ["concepts", "components", "services", "design patterns"],
+    },
+    "deployment": {
         "description": "A deployment file - could be scripts, yaml files, dockerfiles, setup files, etc.",
+        "entity_types": [],
     },
-    {"type": "data", "description": "A data file - could be csv, json, etc."},
-    {
-        "type": "script",
+    "data": {
+        "description": "A data file - could be csv, json, etc.",
+        "entity_types": [],
+    },
+    "script": {
         "description": "A script file - could be a shell script, python script, etc.",
+        "entity_types": [],
     },
-    {
-        "type": "other",
+    "other": {
         "description": "A file that doesn't fit into any of the other categories.",
+        "entity_types": [],
     },
-]
-
-PROMPTS["ENTITY_TYPES"] = {
-    "code": ["definition", "reference"],
-    "script": ["file", "script", "command", "configuration", "dependency", "service"],
-    "test": ["file"],
-    "example": ["file"],
-    "doc": ["file", "component", "service", "architecture", "design pattern"],
 }
+
+# PROMPTS["ENTITY_TYPES"] = {
+#     "code": ["definition", "reference"],
+#     "script": ["file", "script", "command", "configuration", "dependency", "service"],
+#     "test": ["file"],
+#     "example": ["file"],
+#     "doc": ["file", "component", "service", "architecture", "design pattern"],
+# }
 
 
 PROMPTS["entity_extraction"] = """
@@ -59,14 +65,6 @@ Your objective is to identify:
 • High-level content keywords capturing the main concepts
 
 -Steps-
-0. Determine file type:
-   - Infer the file context/type from the `File_summary` by looking for key indicators:
-     - Mentions of "deployment steps," "container configuration," or references to infrastructure (e.g., Docker, Kubernetes, AWS) may indicate a deployment script.
-     - Mentions of "test fixtures," "mock data," or "example usage" may suggest example/test code.
-     - References to "documentation," "overview," "requirements," or "design" may suggest text/documentation.
-     - If references to "installation steps," "dependencies," or "environment variables" appear, it may be a setup script.
-     - Otherwise, default to core code logic.
-   - Do not include the summary text or disclaimers in your final output.
 
 1. Identify significant entities in the file that match the determined file type. For each entity:
    - entity_name: The literal name of the entity as it appears in the code or text.
